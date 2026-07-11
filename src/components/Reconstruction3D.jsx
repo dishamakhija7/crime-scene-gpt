@@ -1,173 +1,208 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Sparkles, Video, Compass, ArrowUp, ArrowLeft, ArrowRight, Share2, MapPin } from 'lucide-react';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Line, Html } from '@react-three/drei';
+import { OrbitControls, Html, Line, Environment, SoftShadows } from '@react-three/drei';
+import { ArrowLeft, Sparkles, MapPin, Share2, Video, ArrowUp, ArrowRight, Pause, Play, RotateCcw } from 'lucide-react';
 import * as THREE from 'three';
+import { EffectComposer, Bloom, SSAO } from '@react-three/postprocessing';
+import { motion, AnimatePresence } from 'framer-motion';
+import AlternativeScenarios from './AlternativeScenarios';
 
-function BuildingBlock({ position, width = 5, depth = 5, height = 6, color = '#0f172a' }) {
+function HeatmapNode({ position, radius, color, intensity = 0.5 }) {
   return (
     <group position={position}>
-      <mesh castShadow receiveShadow position={[0, height / 2, 0]}>
-        <boxGeometry args={[width, height, depth]} />
-        <meshStandardMaterial color={color} roughness={0.25} metalness={0.4} />
+      <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.03, 0]}>
+        <circleGeometry args={[radius, 32]} />
+        <meshBasicMaterial color={color} transparent opacity={intensity * 0.2} depthWrite={false} />
       </mesh>
-      <group position={[0, height - 0.12, 0]}>
-        {[...Array(4)].map((_, row) => (
-          <group key={row} position={[0, 0, -depth / 2 + 0.85 + row * 1.2]}>
-            {[...Array(3)].map((__, col) => (
-              <mesh key={col} position={[-width / 2 + 0.8 + col * 1.6, 0, 0]}>
-                <boxGeometry args={[0.6, 1.2, 0.12]} />
-                <meshStandardMaterial color="#7c3aed" emissive="#7c3aed" emissiveIntensity={0.32} />
-              </mesh>
-            ))}
-          </group>
-        ))}
-      </group>
-      <mesh position={[0, height + 0.12, 0]}>
-        <boxGeometry args={[width * 1.06, 0.18, depth * 1.06]} />
-        <meshStandardMaterial color="#111827" roughness={0.18} metalness={0.75} />
+      <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.04, 0]}>
+        <circleGeometry args={[radius * 0.6, 32]} />
+        <meshBasicMaterial color={color} transparent opacity={intensity * 0.5} depthWrite={false} />
+      </mesh>
+      <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.05, 0]}>
+        <circleGeometry args={[radius * 0.2, 32]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={intensity * 0.8} depthWrite={false} />
       </mesh>
     </group>
   );
 }
 
-function TrafficLight({ position, rotationY = 0, active = 'green' }) {
-  const lights = [
-    { color: '#ef4444', label: 'red' },
-    { color: '#f59e0b', label: 'yellow' },
-    { color: '#22c55e', label: 'green' }
-  ];
+function Tree({ position, scale = 1, type = 'round' }) {
+  return (
+    <group position={position} scale={[scale, scale, scale]}>
+      {/* Trunk */}
+      <mesh position={[0, 0.8, 0]} castShadow>
+        <cylinderGeometry args={[0.2, 0.3, 1.6, 6]} />
+        <meshStandardMaterial color="#451a03" roughness={0.9} />
+      </mesh>
+      {/* Foliage */}
+      {type === 'pine' ? (
+        <group>
+          <mesh position={[0, 2.2, 0]} castShadow>
+            <coneGeometry args={[1.6, 2.5, 6]} />
+            <meshStandardMaterial color="#064e3b" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, 3.4, 0]} castShadow>
+            <coneGeometry args={[1.2, 2.0, 6]} />
+            <meshStandardMaterial color="#065f46" roughness={0.8} />
+          </mesh>
+        </group>
+      ) : (
+        <group>
+          <mesh position={[0, 2.8, 0]} castShadow>
+            <dodecahedronGeometry args={[1.8, 0]} />
+            <meshStandardMaterial color="#14532d" roughness={0.8} />
+          </mesh>
+          <mesh position={[0.8, 2.4, 0.8]} castShadow>
+            <dodecahedronGeometry args={[1.2, 0]} />
+            <meshStandardMaterial color="#166534" roughness={0.8} />
+          </mesh>
+          <mesh position={[-0.8, 2.6, -0.5]} castShadow>
+            <dodecahedronGeometry args={[1.4, 0]} />
+            <meshStandardMaterial color="#15803d" roughness={0.8} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+}
 
+function Building({ position, width, height, depth, color }) {
+  const isNight = true;
+  return (
+    <group position={position}>
+      {/* Main Structure */}
+      <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width, height, depth]} />
+        <meshStandardMaterial color={color} roughness={0.9} metalness={0.1} />
+      </mesh>
+      
+      {/* Roof detail */}
+      <mesh position={[0, height + 0.2, 0]}>
+        <boxGeometry args={[width * 1.02, 0.4, depth * 1.02]} />
+        <meshStandardMaterial color="#334155" roughness={0.9} />
+      </mesh>
+
+      {/* Windows */}
+      {isNight && (
+        <group position={[0, 0, depth / 2 + 0.02]}>
+          {Array.from({ length: Math.floor(height / 2.5) }).map((_, row) => (
+            <group key={`row-${row}`} position={[0, height/2 + 2 - height/2 + row * 2.2, 0]}>
+              {Array.from({ length: Math.floor(width / 1.8) }).map((_, col) => {
+                const isLit = Math.random() > 0.6;
+                return (
+                  <mesh key={`col-${col}`} position={[-width / 2 + 1.2 + col * 1.8, 0, 0]}>
+                    <planeGeometry args={[1.0, 1.4]} />
+                    <meshStandardMaterial 
+                      color={isLit ? "#fef08a" : "#0f172a"} 
+                      emissive={isLit ? "#fef08a" : "#000000"} 
+                      emissiveIntensity={isLit ? 2 : 0} 
+                      roughness={0.1}
+                      metalness={0.8}
+                    />
+                  </mesh>
+                );
+              })}
+            </group>
+          ))}
+        </group>
+      )}
+    </group>
+  );
+}
+
+function Streetlight({ position, rotationY = 0 }) {
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
-      <mesh position={[0, 1.4, 0]} castShadow>
-        <boxGeometry args={[0.24, 2.8, 0.24]} />
-        <meshStandardMaterial color="#0f172a" roughness={0.3} metalness={0.6} />
+      {/* Base */}
+      <mesh position={[0, 0.2, 0]} castShadow>
+        <cylinderGeometry args={[0.2, 0.3, 0.4, 8]} />
+        <meshStandardMaterial color="#1e293b" roughness={0.8} metalness={0.5} />
       </mesh>
-      <mesh position={[0, 2.7, 0.18]} castShadow>
-        <boxGeometry args={[0.5, 1.1, 0.2]} />
-        <meshStandardMaterial color="#111827" roughness={0.2} metalness={0.4} />
+      {/* Pole */}
+      <mesh position={[0, 4, 0]} castShadow>
+        <cylinderGeometry args={[0.08, 0.1, 8, 8]} />
+        <meshStandardMaterial color="#334155" roughness={0.6} metalness={0.6} />
       </mesh>
-      {lights.map((light, idx) => (
-        <mesh key={light.label} position={[0, 3.2 - idx * 0.34, 0.3]}>
-          <sphereGeometry args={[0.08, 12, 12]} />
-          <meshStandardMaterial
-            color={light.color}
-            emissive={light.color}
-            emissiveIntensity={active === light.label ? 0.9 : 0.12}
-          />
-        </mesh>
-      ))}
+      {/* Arm */}
+      <mesh position={[0.8, 7.9, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.06, 0.06, 1.6, 8]} />
+        <meshStandardMaterial color="#334155" roughness={0.6} metalness={0.6} />
+      </mesh>
+      {/* Lamp Head */}
+      <mesh position={[1.6, 7.9, 0]} castShadow>
+        <boxGeometry args={[0.6, 0.15, 0.3]} />
+        <meshStandardMaterial color="#1e293b" />
+      </mesh>
+      {/* Light Bulb */}
+      <mesh position={[1.6, 7.8, 0]}>
+        <planeGeometry args={[0.5, 0.2]} />
+        <meshStandardMaterial color="#ffffff" emissive="#fef08a" emissiveIntensity={4} />
+      </mesh>
+      {/* Actual Light Source */}
+      <spotLight position={[1.6, 7.8, 0]} angle={0.6} penumbra={0.5} intensity={2.5} color="#fef08a" distance={25} castShadow />
     </group>
   );
 }
 
-function ForensicRoadway() {
+function ScooterBody({ color, scale = 1 }) {
   return (
-    <group position={[0, 0, 0]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.08, 0]} receiveShadow>
-        <planeGeometry args={[170, 170]} />
-        <meshStandardMaterial color="#07090f" roughness={1} metalness={0.08} />
+    <group scale={[scale, scale, scale]}>
+      {/* Base Deck */}
+      <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.5, 0.15, 1.8]} />
+        <meshPhysicalMaterial color="#334155" metalness={0.8} roughness={0.4} />
       </mesh>
-
-      <group position={[0, -0.06, 0]}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-          <planeGeometry args={[80, 12]} />
-          <meshStandardMaterial color="#1f2534" roughness={0.68} metalness={0.2} />
-        </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-          <planeGeometry args={[12, 80]} />
-          <meshStandardMaterial color="#1f2534" roughness={0.68} metalness={0.2} />
-        </mesh>
-      </group>
-
-      <group position={[0, -0.045, 0]}>
-        {[[0, 12.5], [0, -12.5], [12.5, 0], [-12.5, 0]].map((offset, idx) => (
-          <mesh key={idx} rotation={[-Math.PI / 2, 0, 0]} position={[offset[0], 0, offset[1]]}>
-            <planeGeometry args={[28, 8]} />
-            <meshStandardMaterial color="#1d2432" roughness={0.88} metalness={0.1} />
+      {/* Front Column */}
+      <mesh position={[0, 0.9, 0.8]} rotation={[0.2, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.08, 0.08, 1.2, 16]} />
+        <meshPhysicalMaterial color={color} metalness={0.6} roughness={0.3} clearcoat={1} />
+      </mesh>
+      {/* Handlebars */}
+      <mesh position={[0, 1.45, 0.9]} rotation={[0, 0, Math.PI / 2]} castShadow>
+        <cylinderGeometry args={[0.05, 0.05, 0.8, 16]} />
+        <meshPhysicalMaterial color="#0f172a" metalness={0.9} roughness={0.1} />
+      </mesh>
+      {/* Headlight */}
+      <mesh position={[0, 1.45, 0.95]}>
+        <boxGeometry args={[0.2, 0.1, 0.1]} />
+        <meshPhysicalMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={2} />
+      </mesh>
+      <spotLight position={[0, 1.45, 1.0]} target-position={[0, 0, 10]} angle={0.4} penumbra={0.5} intensity={15} distance={30} color="#fffaed" castShadow />
+      
+      {/* Seat Column */}
+      <mesh position={[0, 0.7, -0.4]} rotation={[-0.1, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.15, 0.2, 0.6, 16]} />
+        <meshPhysicalMaterial color={color} metalness={0.6} roughness={0.3} clearcoat={1} />
+      </mesh>
+      {/* Seat */}
+      <mesh position={[0, 1.0, -0.45]} castShadow>
+        <boxGeometry args={[0.4, 0.15, 0.8]} />
+        <meshPhysicalMaterial color="#020617" roughness={0.9} />
+      </mesh>
+      {/* Taillight */}
+      <mesh position={[0, 0.9, -0.85]}>
+        <boxGeometry args={[0.3, 0.1, 0.05]} />
+        <meshPhysicalMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+      </mesh>
+      <pointLight position={[0, 0.9, -0.9]} intensity={2} distance={5} color="#ff0000" />
+      
+      {/* Wheels */}
+      {[[0, 0.25, 0.8], [0, 0.25, -0.7]].map((pos, i) => (
+        <group key={i} position={pos}>
+          <mesh rotation={[0, 0, Math.PI/2]} castShadow>
+            <cylinderGeometry args={[0.25, 0.25, 0.15, 32]} />
+            <meshStandardMaterial color="#0a0a0a" roughness={0.8} />
           </mesh>
-        ))}
-      </group>
-
-      <group position={[0, 0.04, 0]}>
-        {[...Array(8)].map((_, i) => (
-          <mesh key={`cross-x-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[-3.9 + i * 1.0, 0, 6.1]}>
-            <planeGeometry args={[0.6, 1.6]} />
-            <meshStandardMaterial color="#fbfbfb" roughness={0.95} emissive="#fbfbfb" emissiveIntensity={0.08} />
+          <mesh rotation={[0, 0, Math.PI/2]} position={[0.08, 0, 0]}>
+            <cylinderGeometry args={[0.15, 0.15, 0.02, 16]} />
+            <meshStandardMaterial color="#94a3b8" metalness={0.8} roughness={0.2} />
           </mesh>
-        ))}
-        {[...Array(8)].map((_, i) => (
-          <mesh key={`cross-z-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[6.1, 0, -3.9 + i * 1.0]}>
-            <planeGeometry args={[1.6, 0.6]} />
-            <meshStandardMaterial color="#fbfbfb" roughness={0.95} emissive="#fbfbfb" emissiveIntensity={0.08} />
+          <mesh rotation={[0, 0, Math.PI/2]} position={[-0.08, 0, 0]}>
+            <cylinderGeometry args={[0.15, 0.15, 0.02, 16]} />
+            <meshStandardMaterial color="#94a3b8" metalness={0.8} roughness={0.2} />
           </mesh>
-        ))}
-      </group>
-
-      <group position={[0, 0.032, 0]}>
-        {[[0, 4.15, 16], [0, -4.15, 16], [4.15, 0, 16], [-4.15, 0, 16]].map((line, idx) => (
-          <mesh key={idx} rotation={[-Math.PI / 2, 0, 0]} position={[line[0], 0, line[1]]}>
-            <planeGeometry args={[line[2], 0.08]} />
-            <meshStandardMaterial color="#e2e8f0" roughness={0.92} emissive="#e2e8f0" emissiveIntensity={0.05} />
-          </mesh>
-        ))}
-        {[[4.15, 0, 16], [4.15, 0, -16], [16, 4.15, 0], [16, -4.15, 0]].map((line, idx) => (
-          <mesh key={`side-${idx}`} rotation={[-Math.PI / 2, 0, 0]} position={[line[0], 0, line[2]]}>
-            <planeGeometry args={[0.08, line[2] === 0 ? 16 : 32]} />
-            <meshStandardMaterial color="#e2e8f0" roughness={0.92} emissive="#e2e8f0" emissiveIntensity={0.05} />
-          </mesh>
-        ))}
-      </group>
-
-      <group>
-        {[
-          [-12, 0, -12, 1.2, 0.12],
-          [12, 0, -12, 1.2, 0.12],
-          [-12, 0, 12, 1.2, 0.12],
-          [12, 0, 12, 1.2, 0.12]
-        ].map(([x, y, z, w, h], idx) => (
-          <mesh key={`sidewalk-${idx}`} position={[x, h, z]}>
-            <boxGeometry args={[w, 0.24, 6.8]} />
-            <meshStandardMaterial color="#111827" roughness={0.65} metalness={0.18} />
-          </mesh>
-        ))}
-      </group>
-
-      <group position={[0, 0.052, 0]}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[3.3, 3.3, 0.02, 64]} />
-          <meshStandardMaterial color="#ffffff" transparent opacity={0.09} />
-        </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[2.1, 64]} />
-          <meshStandardMaterial color="#8b5cf6" transparent opacity={0.06} />
-        </mesh>
-      </group>
-
-      <group>
-        {[
-          [-18.6, 0, -18.6, 0.85],
-          [18.6, 0, 18.6, Math.PI],
-          [-18.6, 0, 18.6, Math.PI / 2],
-          [18.6, 0, -18.6, -Math.PI / 2]
-        ].map(([x, y, z, rot], idx) => (
-          <TrafficLight key={idx} position={[x, 0, z]} rotationY={rot} active={idx % 2 === 0 ? 'green' : 'red'} />
-        ))}
-      </group>
-
-      <group>
-        {[
-          [-22, 0, -22, 8, 8, 10, '#111827'],
-          [22, 0, -22, 10, 7, 11, '#131a2d'],
-          [-22, 0, 22, 8, 9, 9, '#0f172a'],
-          [22, 0, 22, 9, 8, 12, '#0d1321'],
-          [0, 0, -26, 7, 7, 9, '#121828'],
-          [0, 0, 26, 6, 8, 8, '#121629']
-        ].map(([x, y, z, w, d, h, color], idx) => (
-          <BuildingBlock key={idx} position={[x, y, z]} width={w} depth={d} height={h} color={color} />
-        ))}
-      </group>
+        </group>
+      ))}
     </group>
   );
 }
@@ -175,47 +210,183 @@ function ForensicRoadway() {
 function VehicleBody({ texture, color, accent, scale = 1 }) {
   return (
     <group scale={[scale, scale, scale]}>
+      {/* Main Body */}
       <mesh castShadow receiveShadow position={[0, 0.95, 0]}>
-        <boxGeometry args={[2.3, 1.05, 4.5]} />
-        <meshPhysicalMaterial map={texture} color={color} metalness={0.78} roughness={0.2} clearcoat={1} clearcoatRoughness={0.08} />
+        <boxGeometry args={[2.3, 0.9, 4.6]} />
+        <meshPhysicalMaterial map={texture} color={color} metalness={0.6} roughness={0.3} clearcoat={1} clearcoatRoughness={0.1} />
       </mesh>
-      <mesh castShadow position={[0, 1.45, 0.12]}>
-        <boxGeometry args={[1.8, 0.8, 2.2]} />
-        <meshPhysicalMaterial color="#020617" metalness={0.85} roughness={0.12} />
+      {/* Cabin / Roof */}
+      <mesh castShadow position={[0, 1.65, -0.2]}>
+        <boxGeometry args={[1.9, 0.6, 2.4]} />
+        <meshPhysicalMaterial color={color} metalness={0.6} roughness={0.3} clearcoat={1} clearcoatRoughness={0.1} />
       </mesh>
-      <mesh position={[0, 1.18, 1.87]}>
-        <boxGeometry args={[1.18, 0.36, 0.3]} />
-        <meshPhysicalMaterial color={accent} emissive={accent} emissiveIntensity={0.8} transparent opacity={0.9} />
+      {/* Windshield */}
+      <mesh position={[0, 1.65, 1.01]} rotation={[-0.2, 0, 0]}>
+        <planeGeometry args={[1.7, 0.55]} />
+        <meshPhysicalMaterial color="#020617" metalness={0.9} roughness={0.05} />
       </mesh>
-      <mesh position={[0, 1.18, -1.95]}>
-        <boxGeometry args={[1.08, 0.3, 0.2]} />
-        <meshPhysicalMaterial color="#f8fafc" emissive="#f8fafc" emissiveIntensity={0.32} />
+      {/* Rear Window */}
+      <mesh position={[0, 1.65, -1.41]} rotation={[0.2, Math.PI, 0]}>
+        <planeGeometry args={[1.7, 0.55]} />
+        <meshPhysicalMaterial color="#020617" metalness={0.9} roughness={0.05} />
       </mesh>
-      <mesh position={[0, 1.1, -0.1]}>
-        <boxGeometry args={[1.6, 0.5, 1.4]} />
-        <meshPhysicalMaterial color="#111827" metalness={0.95} roughness={0.08} />
+      {/* Side Windows */}
+      <mesh position={[0.96, 1.65, -0.2]} rotation={[0, Math.PI/2, 0]}>
+        <planeGeometry args={[2.2, 0.5]} />
+        <meshPhysicalMaterial color="#020617" metalness={0.9} roughness={0.05} />
       </mesh>
-      <mesh position={[0.95, 0.48, 1.35]} castShadow>
-        <cylinderGeometry args={[0.42, 0.42, 0.4, 24]} />
-        <meshStandardMaterial color="#030712" metalness={0.95} roughness={0.24} />
+      <mesh position={[-0.96, 1.65, -0.2]} rotation={[0, -Math.PI/2, 0]}>
+        <planeGeometry args={[2.2, 0.5]} />
+        <meshPhysicalMaterial color="#020617" metalness={0.9} roughness={0.05} />
       </mesh>
-      <mesh position={[0.95, 0.48, -1.35]} castShadow>
-        <cylinderGeometry args={[0.42, 0.42, 0.4, 24]} />
-        <meshStandardMaterial color="#030712" metalness={0.95} roughness={0.24} />
+      
+      {/* Headlights & Taillights */}
+      <mesh position={[0.7, 1.15, 2.31]}>
+        <boxGeometry args={[0.6, 0.25, 0.1]} />
+        <meshPhysicalMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={2} />
       </mesh>
-      <mesh position={[-0.95, 0.48, 1.35]} castShadow>
-        <cylinderGeometry args={[0.42, 0.42, 0.4, 24]} />
-        <meshStandardMaterial color="#030712" metalness={0.95} roughness={0.24} />
+      <mesh position={[-0.7, 1.15, 2.31]}>
+        <boxGeometry args={[0.6, 0.25, 0.1]} />
+        <meshPhysicalMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={2} />
       </mesh>
-      <mesh position={[-0.95, 0.48, -1.35]} castShadow>
-        <cylinderGeometry args={[0.42, 0.42, 0.4, 24]} />
-        <meshStandardMaterial color="#030712" metalness={0.95} roughness={0.24} />
+      
+      <spotLight position={[0.7, 1.15, 2.4]} target-position={[0.7, 0, 15]} angle={0.5} penumbra={0.6} intensity={25} distance={50} decay={1.5} color="#fffaed" castShadow />
+      <spotLight position={[-0.7, 1.15, 2.4]} target-position={[-0.7, 0, 15]} angle={0.5} penumbra={0.6} intensity={25} distance={50} decay={1.5} color="#fffaed" castShadow />
+      
+      <mesh position={[0.7, 1.15, -2.31]}>
+        <boxGeometry args={[0.6, 0.25, 0.1]} />
+        <meshPhysicalMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
       </mesh>
+      <mesh position={[-0.7, 1.15, -2.31]}>
+        <boxGeometry args={[0.6, 0.25, 0.1]} />
+        <meshPhysicalMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={2} />
+      </mesh>
+      <pointLight position={[0, 1.15, -2.6]} intensity={5} distance={10} color="#ff0000" />
+      
+      {/* Wheels */}
+      {[[1.05, 0.45, 1.5], [-1.05, 0.45, 1.5], [1.05, 0.45, -1.5], [-1.05, 0.45, -1.5]].map((pos, i) => (
+        <group key={i} position={pos}>
+          <mesh rotation={[0, 0, Math.PI/2]} castShadow>
+            <cylinderGeometry args={[0.45, 0.45, 0.4, 32]} />
+            <meshStandardMaterial color="#0a0a0a" roughness={0.8} />
+          </mesh>
+          <mesh rotation={[0, 0, Math.PI/2]} position={[(i % 2 === 0 ? 0.21 : -0.21), 0, 0]}>
+            <cylinderGeometry args={[0.25, 0.25, 0.05, 16]} />
+            <meshStandardMaterial color="#94a3b8" metalness={0.8} roughness={0.2} />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }
 
-function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime, selectedScenario }) {
+function LowPolyCityEnvironment() {
+  return (
+    <group position={[0, 0, 0]}>
+      {/* Base Ground */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]} receiveShadow>
+        <planeGeometry args={[200, 200]} />
+        <meshStandardMaterial color="#020617" roughness={1} />
+      </mesh>
+
+      {/* Main Roads (Asphalt) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
+        <planeGeometry args={[100, 16]} />
+        <meshStandardMaterial color="#1e293b" roughness={0.8} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
+        <planeGeometry args={[16, 100]} />
+        <meshStandardMaterial color="#1e293b" roughness={0.8} />
+      </mesh>
+
+      {/* Sidewalks */}
+      {[
+        [-29, -29], [29, -29], [-29, 29], [29, 29]
+      ].map(([x, z], idx) => (
+        <mesh key={`sidewalk-${idx}`} position={[x, 0.1, z]} receiveShadow castShadow>
+          <boxGeometry args={[42, 0.3, 42]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.9} />
+        </mesh>
+      ))}
+
+      {/* Center Double Lines */}
+      <group position={[0, -0.03, 0]}>
+        {[-30, 30].map(z => (
+          <mesh key={`d-line-z-${z}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, z]}>
+            <planeGeometry args={[0.4, 40]} />
+            <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.2} />
+          </mesh>
+        ))}
+        {[-30, 30].map(x => (
+          <mesh key={`d-line-x-${x}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0, 0]}>
+            <planeGeometry args={[40, 0.4]} />
+            <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.2} />
+          </mesh>
+        ))}
+      </group>
+
+      {/* Crosswalks (Zebra Stripes) */}
+      <group position={[0, -0.03, 0]}>
+        {[8, -8].map(zOffset => 
+          Array.from({length: 10}).map((_, i) => (
+            <mesh key={`cw-z-${zOffset}-${i}`} rotation={[-Math.PI / 2, 0, 0]} position={[-6.75 + i * 1.5, 0, zOffset]}>
+              <planeGeometry args={[0.8, 3]} />
+              <meshStandardMaterial color="#f8fafc" emissive="#f8fafc" emissiveIntensity={0.2} />
+            </mesh>
+          ))
+        )}
+        {[8, -8].map(xOffset => 
+          Array.from({length: 10}).map((_, i) => (
+            <mesh key={`cw-x-${xOffset}-${i}`} rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[xOffset, 0, -6.75 + i * 1.5]}>
+              <planeGeometry args={[0.8, 3]} />
+              <meshStandardMaterial color="#f8fafc" emissive="#f8fafc" emissiveIntensity={0.2} />
+            </mesh>
+          ))
+        )}
+      </group>
+
+      {/* Buildings */}
+      <group>
+        <Building position={[-16, 0, -20]} width={10} depth={18} height={14} color="#334155" />
+        <Building position={[-30, 0, -14]} width={16} depth={10} height={20} color="#0f172a" />
+        <Building position={[-28, 0, -28]} width={12} depth={12} height={10} color="#1e293b" />
+        
+        <Building position={[18, 0, -18]} width={12} depth={14} height={22} color="#0f172a" />
+        <Building position={[32, 0, -16]} width={14} depth={10} height={16} color="#334155" />
+        
+        <Building position={[-18, 0, 18]} width={14} depth={12} height={12} color="#1e293b" />
+        <Building position={[-32, 0, 24]} width={12} depth={14} height={18} color="#0f172a" />
+        
+        <Building position={[16, 0, 20]} width={10} depth={16} height={15} color="#334155" />
+        <Building position={[30, 0, 24]} width={16} depth={12} height={10} color="#0f172a" />
+      </group>
+
+      {/* Trees */}
+      <group>
+        <Tree position={[-10, 0.25, -12]} type="round" scale={0.8} />
+        <Tree position={[-20, 0.25, -10]} type="pine" scale={1.1} />
+        <Tree position={[10, 0.25, -14]} type="round" scale={0.9} />
+        <Tree position={[22, 0.25, -10]} type="round" scale={0.7} />
+        <Tree position={[-12, 0.25, 12]} type="pine" scale={0.85} />
+        <Tree position={[14, 0.25, 14]} type="round" scale={1.0} />
+      </group>
+
+      {/* Streetlights */}
+      <group>
+        <Streetlight position={[-8, 0.25, -12]} rotationY={Math.PI / 2} />
+        <Streetlight position={[8, 0.25, -12]} rotationY={Math.PI / 2} />
+        <Streetlight position={[-8, 0.25, 12]} rotationY={-Math.PI / 2} />
+        <Streetlight position={[8, 0.25, 12]} rotationY={-Math.PI / 2} />
+        <Streetlight position={[-12, 0.25, -8]} rotationY={0} />
+        <Streetlight position={[12, 0.25, -8]} rotationY={Math.PI} />
+        <Streetlight position={[-12, 0.25, 8]} rotationY={Math.PI} />
+        <Streetlight position={[12, 0.25, 8]} rotationY={Math.PI} />
+      </group>
+    </group>
+  );
+}
+
+function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime, selectedScenario, activeTab, onComplete }) {
   const carARef = useRef();
   const carBRef = useRef();
   const pedRef = useRef();
@@ -239,11 +410,15 @@ function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime
   }, [textureLoader]);
 
   useFrame((state, delta) => {
-    if (!isPlaying) return;
+    if (!isPlaying || activeTab === 'heatmap') return;
 
     setCurrentTime((prev) => {
       const next = prev + (delta * playbackSpeed);
-      return next >= 10.0 ? 0.0 : next;
+      if (next >= 10.0) {
+        onComplete?.();
+        return 10.0;
+      }
+      return next;
     });
 
     const carASpeedMod = selectedScenario === 'B' ? 1.4 : 1.0;
@@ -252,24 +427,40 @@ function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime
     if (carARef.current) {
       if (currentTime < collisionTime) {
         const progress = currentTime / collisionTime;
-        carARef.current.position.set(-20 + progress * 18.5 * carASpeedMod, 0.02, -2.0);
-        carARef.current.rotation.y = THREE.MathUtils.lerp(0, 0.18, progress);
+        carARef.current.position.set(-25 + progress * 23.5 * carASpeedMod, 0.02, -2.0);
+        carARef.current.rotation.y = 0;
       } else {
         const diff = currentTime - collisionTime;
-        carARef.current.position.set(-1.5 + diff * 1.5, 0.02, -2.0 + diff * 2.2);
-        carARef.current.rotation.y = 0.24 + diff * 0.04;
+        if (selectedScenario === 'A') {
+          carARef.current.position.set(-1.5 + diff * 18, 0.02, -2.0 + diff * 2.5);
+          carARef.current.rotation.y = 0.15;
+        } else if (selectedScenario === 'B') {
+          carARef.current.position.set(-1.5 + diff * 6, 0.02, -2.0 + diff * 4.5);
+          carARef.current.rotation.y = 0.6;
+        } else {
+          carARef.current.position.set(-1.5 + diff * 12, 0.02, -2.0);
+          carARef.current.rotation.y = 0;
+        }
       }
     }
 
     if (carBRef.current) {
       if (currentTime < collisionTime) {
         const progress = currentTime / collisionTime;
-        carBRef.current.position.set(2.0, 0.02, 20 - progress * 18.2);
-        carBRef.current.rotation.y = THREE.MathUtils.lerp(0, -Math.PI / 2 + 0.12, progress);
+        carBRef.current.position.set(2.0, 0.02, 25 - progress * 23.2);
+        carBRef.current.rotation.y = -Math.PI / 2;
       } else {
         const diff = currentTime - collisionTime;
-        carBRef.current.position.set(2.0 + diff * 3.8, 0.02, 1.8 - diff * 0.4);
-        carBRef.current.rotation.y = -Math.PI / 2 + 0.14 + diff * 0.04;
+        if (selectedScenario === 'A') {
+          carBRef.current.position.set(2.0 + diff * 4.5, 0.02, 1.8 - diff * 3);
+          carBRef.current.rotation.y = -Math.PI / 2 + diff * 4;
+        } else if (selectedScenario === 'B') {
+          carBRef.current.position.set(2.0 + diff * 2.5, 0.02, 1.8 - diff * 1.5);
+          carBRef.current.rotation.y = -Math.PI / 2 + diff * 1.5;
+        } else {
+          carBRef.current.position.set(2.0 + diff * 8, 0.02, 1.8 - diff * 5);
+          carBRef.current.rotation.y = -Math.PI / 2 + diff * 8;
+        }
       }
     }
 
@@ -284,233 +475,115 @@ function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime
     }
 
     if (impactRef.current) {
-      impactRef.current.scale.setScalar(impactActive ? 1.25 + Math.sin(state.clock.elapsedTime * 7) * 0.08 : 0.2);
-      impactRef.current.rotation.z = state.clock.elapsedTime * 0.45;
+      impactRef.current.scale.setScalar(impactActive ? 1.5 + Math.sin(state.clock.elapsedTime * 15) * 0.2 : 0.001);
+      impactRef.current.rotation.z = state.clock.elapsedTime * 2;
     }
 
+    const postCollision = currentTime > collisionTime && currentTime < collisionTime + 2.5;
     if (dustRef.current) {
-      dustRef.current.children.forEach((child, idx) => {
-        child.position.y = 0.28 + Math.sin(state.clock.elapsedTime * 2 + idx) * 0.08;
-        child.rotation.z = state.clock.elapsedTime * 0.3 + idx * 0.2;
-      });
+      dustRef.current.visible = postCollision;
+      if (postCollision) {
+        dustRef.current.children.forEach((child, idx) => {
+          child.position.y = 0.28 + Math.sin(state.clock.elapsedTime * 5 + idx) * 0.15;
+          child.position.x += delta * (idx % 2 === 0 ? 1 : -1) * 2;
+          child.position.z += delta * (idx % 3 === 0 ? 1 : -1) * 2;
+          child.rotation.z += delta * 5;
+        });
+      }
     }
-
-    debrisRefs.current.forEach((mesh, idx) => {
-      if (!mesh) return;
-      const base = idx % 2 === 0 ? 0.08 : 0.12;
-      mesh.position.y = impactActive ? 0.35 + Math.sin(state.clock.elapsedTime * 4 + idx) * 0.04 : 0.2;
-      mesh.rotation.x += delta * base;
-      mesh.rotation.y += delta * 0.05;
-    });
   });
 
   return (
     <>
-      <fog attach="fog" args={['#040a13', 10, 55]} />
-      <ambientLight intensity={0.55} />
-      <hemisphereLight args={['#8fb8ff', '#07090e', 0.7]} />
-      <directionalLight position={[14, 30, 12]} intensity={2.8} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
-      <spotLight position={[-12, 16, 12]} intensity={16} angle={0.28} penumbra={0.55} color="#fbbf24" />
-      <pointLight position={[8, 11, -8]} intensity={10} color="#38bdf8" distance={20} decay={2} />
-      <pointLight position={[-8, 11, 8]} intensity={12} color="#f472b6" distance={20} decay={2} />
+      <fog attach="fog" args={['#06060a', 20, 200]} />
+      <ambientLight intensity={0.2} color="#ffffff" />
+      <directionalLight position={[14, 30, 12]} intensity={1.5} color="#cbd5e1" castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+      <Environment preset="night" />
+      <LowPolyCityEnvironment />
+      {activeTab !== 'heatmap' && (
+        <>
+          <group ref={impactRef} position={[0.2, 0.12, 0]}>
+            <mesh><ringGeometry args={[0.3, 2.6, 64]} /><meshBasicMaterial color="#fde68a" transparent opacity={0.45} /></mesh>
+          </group>
+          <group ref={carARef} position={[-20, 0.02, -2]}><VehicleBody texture={carATexture} color="#0f172a" accent="#334155" /></group>
+          <group ref={carBRef} position={[2, 0.02, 20]}><ScooterBody color="#3b82f6" /></group>
+          <group ref={pedRef} position={[-3.5, 0.9, 5.5]}><mesh><capsuleGeometry args={[0.24, 0.72, 6, 12]} /><meshStandardMaterial color="#fbbf24" /></mesh></group>
+        </>
+      )}
 
-      <ForensicRoadway />
-
-      <Line points={[[-20, 0.02, -2], [-1.5, 0.02, -2], [5, 0.02, 7]]} color="#fb7185" lineWidth={2.4} opacity={0.76} transparent />
-      <Line points={[[2, 0.02, 20], [2, 0.02, 1.8], [15, 0.02, -0.8]]} color="#4ade80" lineWidth={2.4} opacity={0.76} transparent />
-
-      <group ref={impactRef} position={[0.2, 0.12, 0]}>
-        <mesh>
-          <ringGeometry args={[0.3, 2.6, 64]} />
-          <meshBasicMaterial color="#fde68a" transparent opacity={0.45} />
-        </mesh>
-        <mesh>
-          <sphereGeometry args={[0.45, 18, 18]} />
-          <meshBasicMaterial color="#f97316" transparent opacity={0.18} />
-        </mesh>
-      </group>
-
-      <group ref={dustRef}>
-        {Array.from({ length: 16 }).map((_, i) => (
-          <mesh key={i} position={[(-2.2 + (i % 5) * 1.1), 0.25, -1.8 + Math.floor(i / 5) * 0.9]}>
-            <boxGeometry args={[0.16, 0.16, 0.16]} />
-            <meshStandardMaterial color="#64748b" roughness={0.95} transparent opacity={0.4} />
-          </mesh>
-        ))}
-      </group>
-
-      <group>
-        {Array.from({ length: 8 }).map((_, i) => (
-          <mesh
-            key={i}
-            ref={(node) => {
-              debrisRefs.current[i] = node;
-            }}
-            position={[-0.3 + (i % 4) * 0.25, 0.2, -0.4 + Math.floor(i / 4) * 0.3]}
-          >
-            <boxGeometry args={[0.12, 0.12, 0.12]} />
-            <meshStandardMaterial color={i % 2 === 0 ? '#fb923c' : '#f8fafc'} roughness={0.3} metalness={0.6} />
-          </mesh>
-        ))}
-      </group>
-
-      <group ref={carARef} position={[-20, 0.02, -2]}>
-        <VehicleBody texture={carATexture} color="#b91c1c" accent="#fda4af" />
-        <Html distanceFactor={14} position={[0, 2.9, 0]} center>
-          <div className="bg-[#06070b]/90 border border-rose-500/80 text-white font-mono text-[10px] px-2 py-1 rounded shadow-2xl backdrop-blur-md select-none whitespace-nowrap">
-            <span className="font-bold text-rose-400">Car A</span> • {selectedScenario === 'B' ? '55 km/h' : '43 km/h'}
-          </div>
-        </Html>
-      </group>
-
-      <group ref={carBRef} position={[2, 0.02, 20]}>
-        <VehicleBody texture={carBTexture} color="#166534" accent="#86efac" />
-        <Html distanceFactor={14} position={[0, 2.9, 0]} center>
-          <div className="bg-[#06070b]/90 border border-emerald-500/80 text-white font-mono text-[10px] px-2 py-1 rounded shadow-2xl backdrop-blur-md select-none whitespace-nowrap">
-            <span className="font-bold text-emerald-400">Car B</span> • 38 km/h
-          </div>
-        </Html>
-      </group>
-
-      <group ref={pedRef} position={[-3.5, 0.9, 5.5]}>
-        <mesh castShadow>
-          <capsuleGeometry args={[0.24, 0.72, 6, 12]} />
-          <meshStandardMaterial color="#fbbf24" roughness={0.42} metalness={0.1} />
-        </mesh>
-        <mesh position={[0, 0.38, 0]} castShadow>
-          <boxGeometry args={[0.9, 0.85, 0.5]} />
-          <meshStandardMaterial color="#111827" roughness={0.5} />
-        </mesh>
-        <Html distanceFactor={11} position={[0, 1.9, 0]} center>
-          <div className="bg-[#06070b]/90 border border-yellow-500/80 text-white font-mono text-[9px] px-1.5 py-0.5 rounded shadow-xl whitespace-nowrap">
-            <span className="text-yellow-400 font-bold">PEDESTRIAN</span>
-          </div>
-        </Html>
-      </group>
+      {activeTab === 'heatmap' && (
+        <group position={[0, 0, 0]}>
+          <HeatmapNode position={[18, 0.02, -2]} radius={8} color="#f59e0b" intensity={0.4} />
+          <HeatmapNode position={[10, 0.02, -2]} radius={10} color="#f59e0b" intensity={0.6} />
+          <HeatmapNode position={[2, 0.02, 15]} radius={8} color="#f59e0b" intensity={0.4} />
+          <HeatmapNode position={[2, 0.02, 8]} radius={10} color="#f59e0b" intensity={0.6} />
+          <HeatmapNode position={[2, 0.02, -2]} radius={14} color="#ef4444" intensity={0.8} />
+        </group>
+      )}
     </>
   );
 }
 
-export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimeline }) {
+export default function Reconstruction3D({ onGoBack }) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [currentTime, setCurrentTime] = useState(0.0);
   const [selectedScenario, setSelectedScenario] = useState('A');
   const [activeTab, setActiveTab] = useState('3d');
   const [cameraMode, setCameraMode] = useState('orbit');
+  const [reconstructionComplete, setReconstructionComplete] = useState(false);
   const controlsRef = useRef();
 
   useEffect(() => {
-    const controls = controlsRef.current;
-    if (!controls) return;
+    setCurrentTime(0.0);
+    setIsPlaying(true);
+    setReconstructionComplete(false);
+  }, [selectedScenario]);
 
-    const camera = controls.object;
-    const target = new THREE.Vector3(0, 0, 0);
-
-    switch (cameraMode) {
-      case 'top':
-        camera.position.set(0, 34, 0.5);
-        camera.up.set(0, 0, 1);
-        break;
-      case 'front':
-        camera.position.set(0, 16, 30);
-        camera.up.set(0, 1, 0);
-        break;
-      case 'left':
-        camera.position.set(-30, 14, 0);
-        camera.up.set(0, 1, 0);
-        break;
-      default:
-        camera.position.set(0, 30, 20);
-        camera.up.set(0, 1, 0);
-        break;
-    }
-
-    camera.lookAt(target);
-    controls.target.copy(target);
-    controls.update();
-  }, [cameraMode]);
   return (
-    <div className="min-h-screen bg-[#080a13] text-white px-4 py-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <div className="text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#c084fc]">Reconstruction (3D View)</p>
-        </div>
-
-        <div className="rounded-[36px] border border-white/10 bg-[#0b0f1f]/80 shadow-[0_40px_120px_rgba(31,25,54,0.35)] backdrop-blur-xl overflow-hidden">
-          <div className="flex flex-col gap-4 border-b border-white/10 bg-[#0c1224]/90 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <button onClick={onGoBack} className="inline-flex h-12 w-12 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-[#c084fc] transition hover:bg-white/10">
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div className="space-y-1 text-left">
-                <p className="text-[10px] uppercase tracking-[0.35em] text-[#a78bfa]/80">Case</p>
-                <p className="text-sm font-semibold text-white">INV-2025-0715</p>
-                <p className="text-[10px] uppercase tracking-[0.35em] text-[#94a3b8]/80">City Rd / Intersection</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 justify-end">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#111827]/80 px-3 py-2 text-[10px] uppercase tracking-[0.3em] text-[#7dd3fc]">
-                <MapPin className="h-3.5 w-3.5" />
-                LIVE
-              </span>
-              <button className="inline-flex h-12 w-12 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-[#c084fc] transition hover:bg-white/10">
-                <Share2 className="h-5 w-5" />
-              </button>
-              <button className="inline-flex h-12 w-12 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-[#c084fc] transition hover:bg-white/10 text-xl leading-none">
-                ⋮
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 px-4 py-4 border-b border-white/10 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-3 justify-center sm:justify-start">
-              {[
-                { id: '3d', label: '3D View' },
-                { id: 'timeline', label: 'Timeline' },
-                { id: 'map', label: 'Map View' }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    if (tab.id === 'timeline') {
-                      onGoToTimeline?.();
-                      return;
-                    }
-                    setActiveTab(tab.id);
-                  }}
-                  className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${activeTab === tab.id ? 'bg-[#7c3aed] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08)]' : 'bg-white/5 text-[#d1d5db] hover:bg-white/10'}`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <button className="inline-flex items-center gap-2 rounded-2xl border border-[#7c3aed]/40 bg-[#7c3aed]/10 px-4 py-2 text-sm text-[#ede9fe] transition hover:bg-[#7c3aed]/15">
-              <Sparkles className="h-4 w-4 text-[#c4b5fd]" />
-              AI Summary
-            </button>
-          </div>
-
-          <div className="relative bg-[#08101f] aspect-video md:h-[460px] overflow-hidden">
-            <div className="absolute inset-0 z-10 pointer-events-none bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.18),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.16),_transparent_35%)]" />
-            <Canvas camera={{ position: [0, 30, 20], fov: 38, near: 0.1, far: 120 }}>
+    <div className="min-h-[100dvh] bg-[#05060A] text-white p-3 md:p-6 pb-24 md:pb-6 flex flex-col">
+      <div className="mx-auto w-full max-w-[1400px] flex flex-col flex-1 gap-4 md:gap-6">
+        <div className="flex-1 rounded-3xl md:rounded-[40px] border border-white/10 bg-[#0B0F19]/80 backdrop-blur-2xl overflow-hidden flex flex-col">
+          <div className="relative bg-[#05070d] flex-1 min-h-[40vh] md:min-h-[60vh] w-full overflow-hidden flex flex-col">
+            <Canvas camera={{ position: [-25, 28, 25], fov: 38, near: 0.1, far: 120 }}>
               <color attach="background" args={['#06060a']} />
-              <SimulationScene
-                isPlaying={isPlaying} playbackSpeed={playbackSpeed}
-                currentTime={currentTime} setCurrentTime={setCurrentTime}
+              <SoftShadows size={25} samples={10} focus={0.5} />
+              <SimulationScene 
+                isPlaying={isPlaying} 
+                playbackSpeed={playbackSpeed} 
+                currentTime={currentTime} 
+                setCurrentTime={setCurrentTime}
                 selectedScenario={selectedScenario}
+                activeTab={activeTab}
+                onComplete={() => {
+                  setIsPlaying(false);
+                  setReconstructionComplete(true);
+                }}
               />
                 <OrbitControls
                   ref={controlsRef}
                   enablePan={true}
                   enableRotate={true}
+                  enableZoom={false}
                   maxPolarAngle={Math.PI / 2.3}
                   minDistance={10}
                   maxDistance={50}
                 />
-            </Canvas>
-              {activeTab === 'map' && (
-                <div className="absolute top-6 right-6 z-20 w-72 rounded-3xl border border-white/10 bg-[#060912]/90 p-4 text-sm text-slate-300 shadow-2xl">
+                <EffectComposer>
+                  <Bloom luminanceThreshold={1} mipmapBlur intensity={1.5} />
+                  <SSAO radius={0.2} intensity={20} luminanceInfluence={0.5} color="black" />
+                </EffectComposer>
+              </Canvas>
+            </div>
+            
+            <AnimatePresence>
+              {activeTab === 'map' && reconstructionComplete && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                  className="absolute top-6 right-6 z-20 w-72 rounded-3xl border border-white/10 bg-[#060912]/90 p-4 text-sm text-slate-300 shadow-2xl"
+                >
                   <p className="text-[10px] uppercase tracking-[0.35em] text-[#94a3b8] mb-2">Map View</p>
                   <p className="text-xs text-white font-semibold mb-3">Aerial incident overlay</p>
                   <div className="h-32 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 border border-white/10 p-3">
@@ -526,67 +599,183 @@ export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimelin
                       </div>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )}
-          </div>
 
-          <div className="px-4 py-5 border-t border-white/10 bg-[#0b1122]/95 space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <button onClick={() => setIsPlaying(!isPlaying)} className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-[#7c3aed] text-white shadow-[0_20px_40px_rgba(124,58,237,0.28)] transition hover:bg-[#8b5cf6]">
-                  {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                </button>
-                <button onClick={() => setCurrentTime(0.0)} className="inline-flex h-12 w-12 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-[#d1d5db] hover:bg-white/10 transition">
-                  <RotateCcw className="h-5 w-5" />
-                </button>
-                <button onClick={() => setPlaybackSpeed(prev => prev === 1.0 ? 1.5 : prev === 1.5 ? 2.0 : 1.0)} className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#e0def8] hover:bg-white/10 transition">
-                  {playbackSpeed.toFixed(1)}x
-                </button>
-              </div>
-
-              <div className="flex-1">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 rounded-full bg-white/5 px-4 py-3">
-                    <input
-                      type="range"
-                      min="0"
-                      max="10"
-                      step="0.02"
-                      value={currentTime}
-                      onChange={(e) => setCurrentTime(parseFloat(e.target.value))}
-                      className="w-full accent-[#7c3aed] h-2 bg-transparent cursor-pointer"
-                    />
-                  </div>
-                  <span className="min-w-[96px] text-right text-xs uppercase tracking-[0.24em] text-[#9ca3af]">{currentTime.toFixed(2)} / 10.00s</span>
-                </div>
-              </div>
-
-              <button className="inline-flex h-12 w-12 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-[#c084fc] hover:bg-white/10 transition">
-                <ArrowUp className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { id: 'orbit', label: 'Orbit', icon: <Video className="h-4 w-4" /> },
-                { id: 'top', label: 'Top', icon: <ArrowUp className="h-4 w-4" /> },
-                { id: 'front', label: 'Front', icon: <ArrowRight className="h-4 w-4" /> },
-                { id: 'left', label: 'Left', icon: <ArrowLeft className="h-4 w-4" /> }
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setCameraMode(item.id);
-                    setActiveTab('3d');
-                  }}
-                  className={`rounded-3xl border px-4 py-3 text-sm transition flex flex-col items-center justify-center gap-2 ${cameraMode === item.id ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-white' : 'border-white/10 bg-white/5 text-[#e5e7eb] hover:bg-white/10'}`}
+              {/* ALTERNATIVE SCENARIOS OVERLAY */}
+              {activeTab === 'scenarios' && reconstructionComplete && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0 z-30"
                 >
-                  {item.icon}
-                  <span>{item.label}</span>
+                  <AlternativeScenarios 
+                    caseId="INV-2025-0715"
+                    onBack={() => setActiveTab('3d')}
+                    onCompare={() => setActiveTab('3d')}
+                  />
+                </motion.div>
+              )}
+
+              {/* HEATMAP OVERLAY */}
+              {activeTab === 'heatmap' && reconstructionComplete && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center font-sans"
+                >
+                  
+                  {/* FLOATING PANELS */}
+                  
+                  {/* Risk / Impact Probability (Top Left) */}
+                  <motion.div 
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="absolute top-6 left-6 bg-[#0B0F19]/60 border border-white/5 rounded-2xl p-5 w-[220px] shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl pointer-events-auto"
+                  >
+                    <div className="text-white text-[11px] font-bold tracking-wide mb-5">Risk / Impact Probability</div>
+                    <div className="flex gap-4">
+                      <div className="w-4 h-36 rounded-full bg-gradient-to-b from-[#ff0000] via-[#ffff00] via-[#00ff00] to-[#00aaff]" />
+                      <div className="flex flex-col justify-between h-36 text-[11px] text-gray-300 font-medium">
+                        <span>High</span>
+                        <span>Low</span>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Layers (Top Right) */}
+                  <motion.div 
+                    initial={{ x: 20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="absolute top-6 right-6 bg-[#0B0F19]/60 border border-white/5 rounded-2xl p-5 w-[200px] shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl pointer-events-auto"
+                  >
+                    <div className="text-white text-[11px] font-bold tracking-wide mb-5">Layers</div>
+                    <div className="flex flex-col gap-3.5">
+                      {[
+                        { label: 'Heatmap', active: true },
+                        { label: 'Trajectories', active: true },
+                        { label: 'Vehicles', active: true },
+                        { label: 'Roads', active: false },
+                        { label: 'Labels', active: true }
+                      ].map(item => (
+                        <div key={item.label} className="flex justify-between items-center">
+                          <span className="text-[11px] text-gray-200">{item.label}</span>
+                          <div className={`w-8 h-4.5 rounded-full p-[2px] flex items-center transition-colors cursor-pointer ${item.active ? 'bg-[#00E5FF]' : 'bg-[#2a2e3d]'}`}>
+                            <div className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform ${item.active ? 'translate-x-[14px]' : 'translate-x-0'}`} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+
+                  {/* Scenario Confidence (Bottom Left) */}
+                  <motion.div 
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                    className="absolute bottom-6 left-6 bg-[#0B0F19]/60 border border-white/5 rounded-2xl p-5 w-[220px] shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl pointer-events-auto"
+                  >
+                    <div className="text-white text-[11px] font-bold tracking-wide mb-2">Scenario Confidence</div>
+                    <div className="text-[#00E5FF] text-[38px] font-bold leading-none mb-1">94%</div>
+                    <div className="text-[#00E5FF] text-[10px] mb-3 tracking-wide">High Confidence</div>
+                    <div className="w-[140px] h-1.5 bg-[#1a1f2e] rounded-full overflow-hidden">
+                      <div className="w-[94%] h-full bg-[#00E5FF]" />
+                    </div>
+                  </motion.div>
+
+                  {/* Legend (Bottom Right) */}
+                  <motion.div 
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="absolute bottom-6 right-6 bg-[#0B0F19]/60 border border-white/5 rounded-2xl p-5 w-[220px] shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl pointer-events-auto"
+                  >
+                    <div className="flex flex-col gap-4 text-[11px] text-gray-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 border-t-[2.5px] border-dashed border-[#00E5FF]" />
+                        <span>Car A Path</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 border-t-[2.5px] border-dashed border-[#ff8c00]" />
+                        <span>Car B Path</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.9)] ml-1.5" />
+                        <span className="ml-2.5">Impact Point</span>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+          {!['scenarios', 'heatmap'].includes(activeTab) && (
+            <div className="px-4 py-5 border-t border-white/10 bg-[#0b1122]/95 space-y-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setIsPlaying(!isPlaying)} className="inline-flex h-14 w-14 items-center justify-center rounded-3xl bg-[#7c3aed] text-white shadow-[0_20px_40px_rgba(124,58,237,0.28)] transition hover:bg-[#8b5cf6]">
+                    {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                  </button>
+                  <button onClick={() => { setCurrentTime(0.0); setIsPlaying(true); setReconstructionComplete(false); }} className="inline-flex h-12 w-12 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-[#d1d5db] hover:bg-white/10 transition">
+                    <RotateCcw className="h-5 w-5" />
+                  </button>
+                  <button onClick={() => setPlaybackSpeed(prev => prev === 1.0 ? 1.5 : prev === 1.5 ? 2.0 : 1.0)} className="rounded-3xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#e0def8] hover:bg-white/10 transition">
+                    {playbackSpeed.toFixed(1)}x
+                  </button>
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 rounded-full bg-white/5 px-4 py-3">
+                      <input
+                        type="range"
+                        min="0"
+                        max="10"
+                        step="0.02"
+                        value={currentTime}
+                        onChange={(e) => {
+                           setCurrentTime(parseFloat(e.target.value));
+                           if (parseFloat(e.target.value) < 10) setReconstructionComplete(false);
+                        }}
+                        className="w-full accent-[#7c3aed] h-2 bg-transparent cursor-pointer"
+                      />
+                    </div>
+                    <span className="min-w-[96px] text-right text-xs uppercase tracking-[0.24em] text-[#9ca3af]">{currentTime.toFixed(2)} / 10.00s</span>
+                  </div>
+                </div>
+
+                <button className="inline-flex h-12 w-12 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-[#c084fc] hover:bg-white/10 transition">
+                  <ArrowUp className="h-5 w-5" />
                 </button>
-              ))}
+              </div>
+
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { id: 'orbit', label: 'Orbit', icon: <Video className="h-4 w-4" /> },
+                  { id: 'top', label: 'Top', icon: <ArrowUp className="h-4 w-4" /> },
+                  { id: 'front', label: 'Front', icon: <ArrowRight className="h-4 w-4" /> },
+                  { id: 'left', label: 'Left', icon: <ArrowLeft className="h-4 w-4" /> }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCameraMode(item.id);
+                      setActiveTab('3d');
+                    }}
+                    className={`rounded-3xl border px-4 py-3 text-sm transition flex flex-col items-center justify-center gap-2 ${cameraMode === item.id ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-white' : 'border-white/10 bg-white/5 text-[#e5e7eb] hover:bg-white/10'}`}
+                  >
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

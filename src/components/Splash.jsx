@@ -1,7 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 
 export default function Splash({ onNext }) {
+  const [progressStep, setProgressStep] = useState(0);
+
+  const steps = [
+    "Analyzing Evidence...",
+    "Building Timeline...",
+    "Generating Reconstruction...",
+    "Ready."
+  ];
 
   useEffect(() => {
     // The splash screen stays visible for 4.8 seconds total, then moves to the app workspace
@@ -9,7 +17,18 @@ export default function Splash({ onNext }) {
       if (onNext) onNext();
     }, 4800);
 
-    return () => clearTimeout(timer);
+    const interval = setInterval(() => {
+      setProgressStep((prev) => {
+        if (prev < steps.length - 1) return prev + 1;
+        clearInterval(interval);
+        return prev;
+      });
+    }, 1200);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [onNext]);
 
   return (
@@ -27,15 +46,7 @@ export default function Splash({ onNext }) {
       {/* Cybernetic Radial Highlight */}
       <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_center,rgba(10,10,20,0.15)_0%,rgba(6,6,13,0.5)_50%,rgba(6,6,13,0.85)_100%)] pointer-events-none" />
 
-      {/* Navigation Layout Side Ticks */}
-      <div className="absolute inset-x-8 top-1/2 -translate-y-1/2 z-10 hidden md:flex justify-between pointer-events-none opacity-40">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
-          <polyline points="15 18 9 12 15 6"></polyline>
-        </svg>
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white">
-          <polyline points="9 18 15 12 9 6"></polyline>
-        </svg>
-      </div>
+
 
       <div className="w-full h-4" />
 
@@ -90,6 +101,41 @@ export default function Splash({ onNext }) {
 
       {/* 3. RUNTIME TRACK LOADER METRICS */}
       <div className="relative z-10 w-full flex flex-col items-center max-w-lg px-8 pb-10">
+
+        {/* Animated Progress List with Dotted Line */}
+        <div className="flex flex-col gap-4 mb-10 mx-auto w-fit relative">
+          {/* Vertical dashed line */}
+          <div className="absolute left-[5px] top-[14px] bottom-[14px] w-[1px] border-l border-dashed border-gray-600"></div>
+          
+          {steps.map((step, index) => {
+            const isActive = index === progressStep;
+            const isLast = index === steps.length - 1;
+            
+            return (
+              <div key={step} className="relative flex items-center pl-6">
+                <div className="absolute left-[1px] top-1/2 -translate-y-1/2 flex items-center justify-center bg-[#0a0a12] w-3 h-3 z-10">
+                  {isActive ? (
+                    <div className="w-3 h-3 rounded-full border-[1.5px] border-[#7b61ff] flex items-center justify-center shadow-[0_0_12px_rgba(123,97,255,0.8)] animate-pulse bg-[#0a0a12]">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#7b61ff]" />
+                    </div>
+                  ) : isLast ? (
+                    <div className="w-3 h-3 rounded-full border-[1.5px] border-[#7b61ff] bg-[#0a0a12]" />
+                  ) : (
+                    <div className="w-3 h-3 rounded-[2px] border-[1.5px] border-[#1c1c1f] bg-[#0a0a12] flex items-center justify-center shadow-lg">
+                      <div className="w-1.5 h-1.5 bg-gray-500 rounded-[1px]" />
+                    </div>
+                  )}
+                </div>
+                
+                <p className={`text-[13px] font-medium transition-colors duration-500 ${
+                  isActive ? 'text-[#7b61ff] drop-shadow-[0_0_8px_rgba(123,97,255,0.4)]' : 'text-gray-400'
+                }`}>
+                  {step}
+                </p>
+              </div>
+            );
+          })}
+        </div>
 
         {/* Horizontal Loader timeline track */}
         <div className="w-full h-[3px] bg-white/20 rounded-full overflow-hidden mb-5 relative">

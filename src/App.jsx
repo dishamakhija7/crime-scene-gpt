@@ -20,6 +20,7 @@ import PDFReport from './components/PDFReport';
 import TimelineView from './components/TimelineView';
 import SideDrawer from './components/SideDrawer';
 import QuickActionsModal from './components/QuickActionsModal';
+import AlternativeScenarios from './components/AlternativeScenarios';
 
 import { 
   Menu, Bell, ShieldAlert, Compass, FileText, User, 
@@ -163,6 +164,7 @@ function App() {
             onGoBack={() => setActiveView('dashboard')}
             onGoToReport={() => setActiveView('report')} 
             onGoToTimeline={() => setActiveView('timeline')}
+            onGoToHeatmap={() => setActiveView('heatmap')}
           />
         );
       case 'heatmap':
@@ -229,35 +231,38 @@ function App() {
         
         {/* Global Authenticated Top Header */}
         {authStatus === 'authenticated' && activeView !== 'pdf' && (
-          <header className="border-b border-gray-800/80 bg-[#0B0B14]/90 backdrop-blur-md sticky top-0 z-30 px-4 py-3.5 flex justify-between items-center max-w-5xl mx-auto w-full">
-            <div className="flex items-center gap-3">
+          <header className="border-b border-gray-800/50 bg-[#0B0B14] sticky top-0 z-30 px-4 py-4 flex justify-between items-center w-full max-w-5xl mx-auto">
+            <div className="flex items-center gap-4">
               <button 
                 onClick={() => setDrawerOpen(true)}
-                className="p-1.5 bg-[#121222] border border-gray-800 hover:border-accentTeal rounded-lg text-gray-400 hover:text-white transition"
+                className="w-10 h-10 bg-[#12121a] rounded-xl flex items-center justify-center text-gray-400 hover:text-white transition shadow-sm"
               >
                 <Menu className="w-5 h-5" />
               </button>
               
-              <div>
-                <span className="text-[9px] font-mono text-accentTeal uppercase tracking-widest block">CrimeScene GPT</span>
-                <span className="text-xs font-semibold text-white tracking-wide font-mono">{getBreadcrumb()}</span>
+              <div className="flex items-center gap-3">
+                <img src="/favicon.svg" alt="Logo" className="w-8 h-8 object-contain" />
+                <div className="flex flex-col justify-center">
+                  <span className="text-[13px] font-bold text-[#00E5FF] tracking-wide leading-tight">CRIMESCENE GPT</span>
+                  <span className="text-[12px] text-gray-300 leading-tight mt-0.5">AI Accident Reconstruction</span>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               {/* Notification icon */}
               <button
                 onClick={() => setNotificationsOpen(true)}
-                className="relative p-1.5 bg-[#121222] border border-gray-800 rounded-lg text-gray-400 hover:text-white transition"
+                className="relative w-10 h-10 bg-[#12121a] rounded-full flex items-center justify-center text-gray-400 hover:text-white transition shadow-sm"
               >
-                <Bell className="w-4 h-4" />
-                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-red-500 shadow-glowRed" />
+                <Bell className="w-5 h-5" />
+                <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-[#ff3b30]" />
               </button>
 
               {/* User Avatar */}
               <button 
                 onClick={() => setActiveView('profile')}
-                className="w-8 h-8 rounded-full border border-accentPurple overflow-hidden bg-gray-900 flex items-center justify-center transition hover:border-accentTeal"
+                className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center transition border-2 border-transparent hover:border-gray-600"
               >
                 <img 
                   src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=80&h=80&q=80" 
