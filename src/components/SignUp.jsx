@@ -25,25 +25,41 @@ export default function SignUp({ onSignUp, onGoToSignIn }) {
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="w-full max-w-md bg-[#121222]/90 border border-gray-800 rounded-2xl p-8 shadow-2xl relative z-10"
+        className="w-full max-w-md bg-[#0B0F19]/80 backdrop-blur-3xl border border-white/10 rounded-2xl p-8 shadow-[0_20px_80px_rgba(0,0,0,0.6)] relative z-10"
       >
         {/* Decorative corner borders */}
-        <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-accentPurple/50 rounded-tl-2xl" />
-        <div className="absolute top-0 right-0 w-4 h-4 border-t border-r border-accentPurple/50 rounded-tr-2xl" />
-        <div className="absolute bottom-0 left-0 w-4 h-4 border-b border-l border-accentPurple/50 rounded-bl-2xl" />
-        <div className="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-accentPurple/50 rounded-br-2xl" />
+        <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-white/20 rounded-tl-2xl" />
+        <div className="absolute top-0 right-0 w-4 h-4 border-t border-r border-white/20 rounded-tr-2xl" />
+        <div className="absolute bottom-0 left-0 w-4 h-4 border-b border-l border-white/20 rounded-bl-2xl" />
+        <div className="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-white/20 rounded-br-2xl" />
 
-        {/* Small Logo */}
+        {/* Branding Logo */}
         <div className="flex flex-col items-center mb-6">
-          <div className="w-12 h-12 rounded-full border border-accentPurple bg-[#0b0b14] flex items-center justify-center mb-2 shadow-glowPurple">
-            <ShieldAlert className="w-6 h-6 text-accentTeal" />
+          <div className="relative w-16 h-16 mb-4 flex items-center justify-center">
+            <div className="absolute inset-0 bg-[#7b61ff] rounded-full blur-[20px] opacity-60" />
+            <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full text-[#7b61ff] filter drop-shadow-[0_0_10px_rgba(123,97,255,0.5)]">
+              <polygon points="50 3, 93 25, 93 75, 50 97, 7 75, 7 25" fill="rgba(16,12,42,0.85)" stroke="currentColor" strokeWidth="4" />
+            </svg>
+            <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full text-[#b6a6ff]" style={{ transform: 'scale(0.86)' }}>
+              <polygon points="50 3, 93 25, 93 75, 50 97, 7 75, 7 25" fill="none" stroke="currentColor" strokeWidth="2" />
+            </svg>
+            <div className="relative z-10 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="6" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth="3.5" />
+                <circle cx="11" cy="11" r="1.5" fill="currentColor" />
+              </svg>
+            </div>
           </div>
-          <h2 className="text-xl font-bold text-white tracking-wider font-mono">CRIMESCENE GPT</h2>
+          <h2 className="text-xl font-bold tracking-wider text-white uppercase flex items-center justify-center gap-1.5 filter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            <span>CRIMESCENE</span>
+            <span className="text-[#a692ff] font-extrabold drop-shadow-[0_0_10px_rgba(166,146,255,0.7)]">GPT</span>
+          </h2>
         </div>
 
         <div className="text-center mb-6">
-          <h3 className="text-2xl font-bold text-white">Create Account</h3>
-          <p className="text-gray-400 text-xs mt-1">Join CrimeScene GPT</p>
+          <h3 className="text-lg font-mono font-bold tracking-[0.1em] text-white">NEW REGISTRATION</h3>
+          <p className="text-gray-400 text-xs mt-2 font-mono">Initialize investigator profile</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
