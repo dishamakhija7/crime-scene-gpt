@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Splash from './components/Splash';
 import SignIn from './components/SignIn';
 import SignUp from './components/SignUp';
+import ForgotPassword from './components/ForgotPassword';
 import Profile from './components/Profile';
 import PersonalInfo from './components/settings/PersonalInfo';
 import ChangePassword from './components/settings/ChangePassword';
@@ -125,10 +126,13 @@ function App() {
       return <Splash onNext={handleNextFromSplash} />;
     }
     if (authStatus === 'signin') {
-      return <SignIn onSignIn={handleSignIn} onGoToSignUp={() => setAuthStatus('signup')} />;
+      return <SignIn onSignIn={handleSignIn} onGoToSignUp={() => setAuthStatus('signup')} onGoToForgot={() => setAuthStatus('forgot_password')} />;
     }
     if (authStatus === 'signup') {
       return <SignUp onSignUp={handleSignUp} onGoToSignIn={() => setAuthStatus('signin')} />;
+    }
+    if (authStatus === 'forgot_password') {
+      return <ForgotPassword onGoToSignIn={() => setAuthStatus('signin')} />;
     }
 
     // Authenticated views
@@ -158,23 +162,17 @@ function App() {
             onBack={() => setActiveView('mcq')} 
           />
         );
-      case 'reconstruction':
-        return (
-          <Reconstruction3D 
-            onGoBack={() => setActiveView('dashboard')}
-            onGoToReport={() => setActiveView('report')} 
-            onGoToTimeline={() => setActiveView('timeline')}
-            onGoToHeatmap={() => setActiveView('heatmap')}
-          />
-        );
       case 'heatmap':
         return <ConfidenceHeatmap />;
+      case 'reconstruction':
+        return null; // Handled by the persistent background layer
       case 'report':
         return (
           <ReportPreview 
             onTogglePDF={() => setActiveView('pdf')} 
             onGoToTimeline={() => setActiveView('timeline')}
             onGoToEvidence={() => setActiveView('evidence')}
+            onGoBack={() => setActiveView('reconstruction')}
           />
         );
       case 'pdf':
@@ -349,6 +347,19 @@ function App() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Persistent Analysis Engine */}
+          {['reconstruction', 'report', 'timeline', 'heatmap', 'evidence'].includes(activeView) && (
+            <div className={activeView === 'reconstruction' ? 'block absolute inset-0 z-10 bg-black flex flex-col' : 'fixed inset-0 z-[-10] opacity-0 pointer-events-none'}>
+              <Reconstruction3D 
+                onGoBack={() => setActiveView('dashboard')}
+                onGoToReport={() => setActiveView('report')} 
+                onGoToTimeline={() => setActiveView('timeline')}
+                onGoToHeatmap={() => setActiveView('heatmap')}
+              />
+            </div>
+          )}
+          
         </main>
 
         {/* Global Authenticated Bottom Navigation Bar */}

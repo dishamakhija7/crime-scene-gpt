@@ -17,7 +17,7 @@ export default function SignUp({ onSignUp, onGoToSignIn }) {
   };
 
   return (
-    <div className="relative w-full min-h-screen flex items-center justify-center bg-[#09090E] p-6 cyber-grid overflow-y-auto">
+    <div className="relative w-full min-h-screen flex flex-col items-center justify-center gap-6 bg-[#09090E] p-6 cyber-grid overflow-y-auto pt-12 md:pt-6">
       {/* Radial glow background */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accentPurple/10 rounded-full blur-[140px] pointer-events-none" />
 
@@ -148,6 +148,18 @@ export default function SignUp({ onSignUp, onGoToSignIn }) {
               I agree to the <a href="#" className="text-accentTeal hover:underline">Terms & Conditions</a> and <a href="#" className="text-accentTeal hover:underline">Privacy Policy</a>
             </span>
           </label>
+
+          <div className="p-4 rounded-xl bg-accentPurple/5 border border-accentPurple/20 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-accentPurple/20 flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-4 h-4 text-accentPurple" />
+            </div>
+            <div>
+              <h4 className="text-white text-xs font-bold mb-1">Security First</h4>
+              <p className="text-gray-400 text-[10px] leading-relaxed">
+                We use secure token based authentication to ensure your account remains safe.
+              </p>
+            </div>
+          </div>
 
           {/* Create Account Button */}
           <button 

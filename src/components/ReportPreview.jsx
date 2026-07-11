@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Download, Share2, FileText, CheckCircle2, ChevronRight, AlertTriangle, Printer, Sparkles } from 'lucide-react';
+import { ArrowLeft, Download, Share2, FileText, CheckCircle2, ChevronRight, AlertTriangle, Printer, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export default function ReportPreview({ onTogglePDF, onGoToTimeline, onGoToEvidence }) {
+export default function ReportPreview({ onTogglePDF, onGoToTimeline, onGoToEvidence, onGoBack }) {
   const [activeTab, setActiveTab] = useState('report'); // report, timeline, evidence
 
   const keyFindings = [
@@ -19,9 +19,20 @@ export default function ReportPreview({ onTogglePDF, onGoToTimeline, onGoToEvide
         
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-850 pb-4 gap-3">
-          <div>
-            <span className="text-[10px] font-mono text-accentTeal uppercase tracking-widest block">AI-Generated Analysis</span>
-            <h2 className="text-xl font-bold text-white font-mono mt-0.5">INV-2025-0715</h2>
+          <div className="flex items-center gap-3">
+            {onGoBack && (
+              <button 
+                onClick={onGoBack} 
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-800 bg-[#0b0b14] text-gray-400 hover:text-white hover:bg-gray-800 transition"
+                title="Go Back to 3D Scene"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <div>
+              <span className="text-[10px] font-mono text-accentTeal uppercase tracking-widest block">AI-Generated Analysis</span>
+              <h2 className="text-xl font-bold text-white font-mono mt-0.5">INV-2025-0715</h2>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             {/* Tab links to match mockup header */}

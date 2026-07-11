@@ -1,10 +1,12 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Play, Pause, RotateCcw, Sparkles, Video, Compass, ArrowUp, ArrowLeft, ArrowRight, Share2, MapPin, CheckCircle2, X, ChevronRight } from 'lucide-react';
+import { Play, Pause, RotateCcw, Sparkles, Video, Compass, ArrowUp, ArrowLeft, ArrowRight, Share2, MapPin, CheckCircle2, X, ChevronRight, Hand } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
+import ConfidenceHeatmap from './ConfidenceHeatmap';
 import AlternativeScenarios from './AlternativeScenarios';
+import MapView from './MapView';
 
 function HeatmapNode({ position, radius, color, intensity = 0.5 }) {
   return (
@@ -623,7 +625,7 @@ function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime
                 </div>
               </Html>
             )}
-            {!isPlaying && Math.abs(currentTime - 6.5) < 0.1 && (
+            {!isPlaying && currentTime >= 6.4 && currentTime <= 6.8 && (
               <Html distanceFactor={10} position={[0, 6, 0]} center zIndexRange={[100, 0]}>
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="relative flex flex-col items-center">
                   <div className="bg-[#0b1320]/95 border border-[#ef4444]/40 p-2.5 rounded shadow-[0_10px_40px_rgba(239,68,68,0.3)] backdrop-blur-xl whitespace-nowrap">
@@ -646,7 +648,7 @@ function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime
                 </div>
               </Html>
             )}
-            {!isPlaying && Math.abs(currentTime - 6.5) < 0.1 && (
+            {!isPlaying && currentTime >= 6.4 && currentTime <= 6.8 && (
               <Html distanceFactor={10} position={[0, 5, 0]} center zIndexRange={[100, 0]}>
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="relative flex flex-col items-center">
                   <div className="bg-[#0b1320]/95 border border-[#f59e0b]/40 p-2.5 rounded shadow-[0_10px_40px_rgba(245,158,11,0.3)] backdrop-blur-xl whitespace-nowrap">
@@ -661,7 +663,7 @@ function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime
           </group>
 
           {/* Central Cause Tooltip */}
-          {!isPlaying && Math.abs(currentTime - 6.5) < 0.1 && (
+          {!isPlaying && currentTime >= 6.4 && currentTime <= 6.8 && (
             <group position={[-1.5, 0.02, 1.8]}>
               <Html distanceFactor={15} position={[0, 4, 0]} center zIndexRange={[100, 0]}>
                 <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }} className="relative flex flex-col items-center">
@@ -713,13 +715,22 @@ function SimulationScene({ isPlaying, playbackSpeed, currentTime, setCurrentTime
 }
 
 export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimeline, onGoToHeatmap }) {
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [currentTime, setCurrentTime] = useState(0.0);
   const [selectedScenario, setSelectedScenario] = useState('A');
   const [activeTab, setActiveTab] = useState('3d');
   const [cameraMode, setCameraMode] = useState('orbit');
   const controlsRef = useRef();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowTutorial(false);
+      setIsPlaying(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const controls = controlsRef.current;
@@ -817,7 +828,31 @@ export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimelin
 
           <div className="relative bg-[#05070d] flex-1 min-h-[40vh] md:min-h-[60vh] w-full overflow-hidden flex flex-col">
             <div className="absolute inset-0 z-10 pointer-events-none bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.18),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.16),_transparent_35%)]" />
-            <div className="absolute inset-0 z-0">
+            
+            <AnimatePresence>
+              {showTutorial && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none bg-black/40 backdrop-blur-[2px]"
+                >
+                  <div className="flex flex-col items-center gap-4 text-center">
+                    <div className="flex items-center gap-3">
+                      <ArrowLeft className="w-6 h-6 text-white/70 animate-pulse" />
+                      <Hand className="w-12 h-12 text-white/90" />
+                      <ArrowRight className="w-6 h-6 text-white/70 animate-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-semibold text-xl tracking-wide">Slide to rotate</h3>
+                      <p className="text-gray-300 text-sm mt-1">Drag left or right to explore<br/>the scene</p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="absolute inset-0 z-0 cursor-pointer" onClick={() => setIsPlaying(!isPlaying)}>
               <Canvas camera={{ position: [0, 30, 20], fov: 38, near: 0.1, far: 120 }}>
                 <color attach="background" args={['#06060a']} />
               <SimulationScene 
@@ -841,23 +876,7 @@ export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimelin
               </Canvas>
             </div>
               {activeTab === 'map' && (
-                <div className="absolute top-6 right-6 z-20 w-72 rounded-3xl border border-white/10 bg-[#060912]/90 p-4 text-sm text-slate-300 shadow-2xl">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-[#94a3b8] mb-2">Map View</p>
-                  <p className="text-xs text-white font-semibold mb-3">Aerial incident overlay</p>
-                  <div className="h-32 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 border border-white/10 p-3">
-                    <div className="h-full w-full rounded-2xl bg-[radial-gradient(circle_at_top_left,_rgba(124,58,237,0.18),_transparent_25%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.16),_transparent_25%)] p-2">
-                      <div className="h-full border border-dashed border-white/10 rounded-2xl bg-[#02040b]/80 flex flex-col justify-between p-2">
-                        <div className="text-[10px] text-slate-500">Scene footprint</div>
-                        <div className="grid grid-cols-3 gap-1">
-                          {Array.from({ length: 9 }).map((_, idx) => (
-                            <span key={idx} className="block h-2 rounded bg-white/10" />
-                          ))}
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-2">Orientation: North-up</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <MapView onBack={() => setActiveTab('3d')} />
               )}
 
               {/* NEW ALTERNATIVE SCENARIOS OVERLAY */}
@@ -874,6 +893,12 @@ export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimelin
                 <div className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center font-sans">
                   
                   {/* FLOATING PANELS */}
+                  <div className="absolute top-6 left-1/2 -translate-x-1/2 pointer-events-auto z-50">
+                    <button onClick={() => setActiveTab('3d')} className="flex items-center gap-2 px-4 py-2 bg-[#0B0F19]/80 border border-white/10 rounded-full text-white text-xs font-semibold backdrop-blur-md shadow-lg hover:bg-white/10 transition">
+                      <ArrowLeft className="w-4 h-4" />
+                      Back to 3D View
+                    </button>
+                  </div>
                   
                   {/* Risk / Impact Probability (Top Left) */}
                   <div className="absolute top-6 left-6 bg-[#0B0F19]/60 border border-white/5 rounded-2xl p-5 w-[220px] z-40 shadow-[0_8px_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
@@ -940,11 +965,12 @@ export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimelin
               )}
             
             <AnimatePresence>
-              {!isPlaying && Math.abs(currentTime - 6.5) < 0.1 && activeTab === '3d' && (
+              {!isPlaying && currentTime >= 6.4 && currentTime <= 6.8 && activeTab === '3d' && (
                 <motion.div
                   initial={{ opacity: 0, x: 50 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 50 }}
+                  onClick={(e) => e.stopPropagation()}
                   className="absolute top-2 right-2 z-40 w-72 md:w-80 rounded-[20px] border border-white/10 bg-[#0B0F19]/90 shadow-[0_20px_80px_rgba(0,0,0,0.5)] backdrop-blur-3xl overflow-hidden flex flex-col"
                 >
                   <div className="flex items-center justify-between border-b border-white/5 bg-white/5 px-4 py-3">
@@ -978,14 +1004,20 @@ export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimelin
                     </div>
 
                     <div className="flex flex-col gap-2">
-                      <button className="w-full rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 py-2.5 text-xs md:text-sm font-semibold text-white transition flex items-center justify-center gap-2">
+                      <button 
+                        onClick={onGoToReport}
+                        className="w-full rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 py-2.5 text-xs md:text-sm font-semibold text-white transition flex items-center justify-center gap-2">
                         Generate Report
                       </button>
                       <div className="grid grid-cols-2 gap-2">
-                        <button className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 py-2 text-[11px] md:text-[13px] font-medium text-slate-300 transition">
+                        <button 
+                          onClick={() => setActiveTab('scenarios')}
+                          className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 py-2 text-[11px] md:text-[13px] font-medium text-slate-300 transition">
                           Compare
                         </button>
-                        <button className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 py-2 text-[11px] md:text-[13px] font-medium text-slate-300 transition">
+                        <button 
+                          onClick={() => setActiveTab('heatmap')}
+                          className="rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 py-2 text-[11px] md:text-[13px] font-medium text-slate-300 transition">
                           Confidence
                         </button>
                       </div>
@@ -997,7 +1029,7 @@ export default function Reconstruction3D({ onGoBack, onGoToReport, onGoToTimelin
             
           </div>
 
-          {!['scenarios', 'heatmap'].includes(activeTab) && (
+          {!['scenarios', 'heatmap', 'map'].includes(activeTab) && (
             <div className="px-4 py-5 border-t border-white/10 bg-[#0b1122]/95 space-y-4">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">

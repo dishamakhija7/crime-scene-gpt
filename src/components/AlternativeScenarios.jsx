@@ -119,7 +119,18 @@ export default function AlternativeScenarios({ onBack, onCompare, caseId = 'INV-
       >
         {/* Header inside container */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-white/5 bg-[#0a0d16]">
-          <h2 className="text-[#a78bfa] font-bold tracking-[0.2em] text-sm">ALTERNATIVE SCENARIOS</h2>
+          <div className="flex items-center gap-4">
+            {onBack && (
+              <button 
+                onClick={onBack} 
+                className="w-8 h-8 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition"
+                title="Go Back to 3D Scene"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+            <h2 className="text-[#a78bfa] font-bold tracking-[0.2em] text-sm">ALTERNATIVE SCENARIOS</h2>
+          </div>
           <span className="font-mono text-sm tracking-wide text-gray-400">{caseId}</span>
         </div>
 
