@@ -17,6 +17,7 @@ import Dashboard from './components/Dashboard';
 import CreateCase from './components/CreateCase';
 import MCQFlow from './components/MCQFlow';
 import EvidenceUpload from './components/EvidenceUpload';
+import EvidenceIntakeAgent from './components/EvidenceIntakeAgent';
 import Reconstruction3D from './components/Reconstruction3D';
 import ConfidenceHeatmap from './components/ConfidenceHeatmap';
 import ReportPreview from './components/ReportPreview';
@@ -35,7 +36,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 function App() {
   const [authStatus, setAuthStatus] = useState('splash'); // 'splash', 'signin', 'signup', 'authenticated'
-  const [activeView, setActiveView] = useState('dashboard'); // dashboard, mcq, evidence, reconstruction, heatmap, report, pdf, timeline, profile, personal, password, notifications, linked, help, about, cases
+  const [activeView, setActiveView] = useState('dashboard'); // dashboard, mcq, evidence, intake_agent, reconstruction, heatmap, report, pdf, timeline, profile, personal, password, notifications, linked, help, about, cases
   
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
@@ -135,6 +136,7 @@ function App() {
       case 'dashboard': return 'Incident Hub';
       case 'mcq': return 'AI Questionnaire Flow';
       case 'evidence': return 'Multi-Input Evidence';
+      case 'intake_agent': return 'Evidence Intake Agent';
       case 'reconstruction': return '3D Accident Mesh';
       case 'heatmap': return 'Likelihood Heatmap';
       case 'report': return 'AI Analysis Report';
@@ -202,8 +204,15 @@ function App() {
         return (
           <EvidenceUpload 
             caseId={activeCaseId}
-            onContinue={() => setActiveView('reconstruction')} 
+            onContinue={() => setActiveView('intake_agent')} 
             onBack={() => setActiveView('mcq')} 
+          />
+        );
+      case 'intake_agent':
+        return (
+          <EvidenceIntakeAgent
+            caseId={activeCaseId}
+            onAnalysisComplete={() => setActiveView('reconstruction')}
           />
         );
       case 'heatmap':

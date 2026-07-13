@@ -3,7 +3,7 @@ import {
   FileText, Camera, Video, Film, Mic, Map, Car, Files, 
   Upload, X, Check, Eye
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { auth } from '../firebase';
 import { uploadToCloudinary } from '../services/cloudinary';
 import { saveEvidenceMetadata, getEvidenceByUser, deleteEvidenceMetadata } from '../services/evidenceService';
@@ -43,7 +43,9 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
   const [uploading, setUploading] = useState(false);
   const [progressMap, setProgressMap] = useState({}); // { tempKey: 0-100 }
   const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState('');
   const [loadingFiles, setLoadingFiles] = useState(true);
+  const [previewFile, setPreviewFile] = useState(null);
   // Text Statement inline modal
   const [statementOpen, setStatementOpen] = useState(false);
   const [statementText, setStatementText] = useState('');
@@ -70,14 +72,25 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
       try {
         const docs = await getEvidenceByUser(user.uid);
         const VISUAL_TYPES = ['Photos', 'CCTV Footage', 'Dashcam', 'Videos'];
-        const mapped = docs.map((d) => ({
-          id:        d.id,
-          name:      d.originalName || d.fileName || 'Untitled',
-          type:      d.type,
-          size:      formatSize(d.fileSize),
-          publicId:  d.publicId,
-          thumbnail: VISUAL_TYPES.includes(d.type) ? d.cloudinaryUrl : '',
-        }));
+        const mapped = docs.map((d) => {
+          let thumb = '';
+          if (VISUAL_TYPES.includes(d.type) && d.cloudinaryUrl) {
+            thumb = d.cloudinaryUrl;
+            if (['CCTV Footage', 'Dashcam', 'Videos'].includes(d.type)) {
+              thumb = thumb.replace(/\.[^/.]+$/, '.jpg');
+            }
+          }
+          return {
+            id:        d.id,
+            name:      d.originalName || d.fileName || 'Untitled',
+            type:      d.type,
+            size:      formatSize(d.fileSize),
+            publicId:  d.publicId,
+            thumbnail: thumb,
+            url:       d.cloudinaryUrl,
+            statementText: d.statementText || '',
+          };
+        });
         setUploadedFiles(mapped);
       } catch (err) {
         console.error('Failed to load evidence:', err);
@@ -99,29 +112,36 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
       const tempKey = `${Date.now()}_statement`;
       setProgressMap((prev) => ({ ...prev, [tempKey]: 0 }));
 
-      const result = await uploadToCloudinary(
-        new File([blob], `statement_${Date.now()}.txt`, { type: 'text/plain' }),
-        (pct) => setProgressMap((prev) => ({ ...prev, [tempKey]: pct }))
-      );
+      // Simulate quick progress for UI
+      setTimeout(() => setProgressMap((prev) => ({ ...prev, [tempKey]: 50 })), 200);
 
+      const filename = `Statement_${new Date().toLocaleDateString().replace(/\//g, '-')}.txt`;
+
+      // Skip Cloudinary for text statements, save directly to Firestore
       const evidenceId = await saveEvidenceMetadata({
         caseId:        caseId || null,
         type:         'Text Statement',
-        cloudinaryUrl: result.secure_url,
-        publicId:      result.public_id,
-        originalName:  result.original_filename,
-        fileSize:      result.bytes,
-        format:        result.format,
+        cloudinaryUrl: '', 
+        publicId:      tempKey,
+        originalName:  filename,
+        fileSize:      blob.size,
+        format:        'txt',
         uploadedBy:    user.uid,
+        statementText: statementText
       });
 
+      setProgressMap((prev) => ({ ...prev, [tempKey]: 100 }));
+
       setUploadedFiles((prev) => [
-        { id: evidenceId, name: result.original_filename, type: 'Text Statement', size: formatSize(result.bytes), thumbnail: '' },
+        { id: evidenceId, name: filename, type: 'Text Statement', size: formatSize(blob.size), thumbnail: '', statementText: statementText, url: '' },
         ...prev,
       ]);
-      setProgressMap((prev) => { const n = { ...prev }; delete n[tempKey]; return n; });
-      setStatementText('');
-      setStatementOpen(false);
+      
+      setTimeout(() => {
+        setProgressMap((prev) => { const n = { ...prev }; delete n[tempKey]; return n; });
+        setStatementText('');
+        setStatementOpen(false);
+      }, 500);
     } catch (err) {
       console.error('Statement save failed:', err);
       setError('Failed to save statement. Please try again.');
@@ -151,10 +171,11 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
 
     if (!files.length || !user) return;
     setError(null);
+    setSuccessMsg('');
     setUploading(true);
 
-    for (const file of files) {
-      const tempKey = `${Date.now()}_${file.name}`;
+    const uploadPromises = files.map(async (file, index) => {
+      const tempKey = `${Date.now()}_${index}_${file.name}`;
       setProgressMap((prev) => ({ ...prev, [tempKey]: 0 }));
 
       try {
@@ -178,6 +199,15 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
 
         // 3. Append to local state
         const VISUAL_TYPES = ['Photos', 'CCTV Footage', 'Dashcam', 'Videos'];
+        let thumb = '';
+        if (VISUAL_TYPES.includes(category) && result.secure_url) {
+          thumb = result.secure_url;
+          if (['CCTV Footage', 'Dashcam', 'Videos'].includes(category)) {
+            // Cloudinary trick: change extension to .jpg to get video thumbnail
+            thumb = thumb.replace(/\.[^/.]+$/, '.jpg');
+          }
+        }
+
         setUploadedFiles((prev) => [
           {
             id:        evidenceId,
@@ -185,18 +215,28 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
             type:      category,
             size:      formatSize(result.bytes),
             publicId:  result.public_id,
-            thumbnail: VISUAL_TYPES.includes(category) ? result.secure_url : '',
+            thumbnail: thumb,
+            url:       result.secure_url,
           },
           ...prev,
         ]);
+        return true;
       } catch (err) {
         console.error(`Upload failed for ${file.name}:`, err);
-        setError(`Failed to upload "${file.name}". ${err.message}`);
+        setError((prevError) => prevError ? `${prevError}\nFailed to upload "${file.name}". ${err.message}` : `Failed to upload "${file.name}". ${err.message}`);
+        return false;
       } finally {
         setProgressMap((prev) => { const n = { ...prev }; delete n[tempKey]; return n; });
       }
-    }
+    });
 
+    const results = await Promise.all(uploadPromises);
+    const successCount = results.filter(Boolean).length;
+    if (successCount > 0) {
+      setSuccessMsg(`Successfully uploaded ${successCount} file(s).`);
+      setTimeout(() => setSuccessMsg(''), 4000);
+    }
+    
     setUploading(false);
   };
 
@@ -229,6 +269,47 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
 
   return (
     <div className="w-full max-w-2xl mx-auto p-4 md:p-6 space-y-6">
+      {/* Preview Modal */}
+      <AnimatePresence>
+        {previewFile && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+            onClick={() => setPreviewFile(null)}
+          >
+            <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
+              <button 
+                onClick={() => setPreviewFile(null)}
+                className="absolute -top-12 right-0 text-gray-400 hover:text-white transition"
+              >
+                <X className="w-8 h-8" />
+              </button>
+              
+              {previewFile.type === 'Text Statement' ? (
+                <div className="w-full bg-[#121222] border border-gray-700 rounded-2xl p-6 shadow-2xl text-white whitespace-pre-wrap font-mono text-sm">
+                  <h3 className="text-accentTeal mb-4 font-bold uppercase tracking-wider text-lg">{previewFile.name}</h3>
+                  {previewFile.statementText || "Text statement loaded successfully."}
+                </div>
+              ) : ['CCTV Footage', 'Dashcam', 'Videos'].includes(previewFile.type) ? (
+                <video src={previewFile.url} controls autoPlay className="max-w-full max-h-[80vh] rounded-lg shadow-2xl bg-black border border-gray-800" />
+              ) : previewFile.type === 'Photos' ? (
+                <img src={previewFile.url} alt="" className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl border border-gray-800" />
+              ) : (
+                <div className="w-full bg-[#121222] border border-gray-700 rounded-2xl p-6 shadow-2xl text-center text-white">
+                  <FileText className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                  <p className="font-mono text-lg mb-2">{previewFile.name}</p>
+                  <a href={previewFile.url} target="_blank" rel="noopener noreferrer" className="text-accentTeal hover:underline text-sm font-mono">
+                    Download / View Document
+                  </a>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Hidden universal file input — programmatically triggered */}
       <input
         ref={fileInputRef}
@@ -303,14 +384,29 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
           </motion.div>
         )}
 
+        {/* Success banner */}
+        {successMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 flex items-start gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg"
+          >
+            <Check className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-green-300 font-mono">{successMsg}</p>
+            <button onClick={() => setSuccessMsg('')} className="ml-auto text-green-400 hover:text-green-200">
+              <X className="w-3 h-3" />
+            </button>
+          </motion.div>
+        )}
+
         {/* Active upload progress bars */}
         {activeUploads > 0 && (
           <div className="mb-4 space-y-2">
             {Object.entries(progressMap).map(([key, pct]) => (
               <div key={key}>
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] font-mono text-gray-400 truncate">{key.split('_').slice(1).join('_')}</span>
-                  <span className="text-[10px] font-mono text-accentTeal">{pct}%</span>
+                  <span className="text-[10px] font-mono text-gray-400 truncate">{key.split('_').slice(2).join('_')}</span>
+                  <span className="text-[10px] font-mono text-accentTeal">{pct === 100 ? 'Processing on server...' : `${pct}%`}</span>
                 </div>
                 <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
                   <motion.div
@@ -394,7 +490,11 @@ export default function EvidenceUpload({ caseId, onContinue, onBack }) {
                     <X className="w-2.5 h-2.5" />
                   </button>
 
-                  <div className="w-10 h-10 rounded bg-[#121222] border border-gray-800 flex items-center justify-center overflow-hidden mb-1">
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-lg transition-opacity z-[5] cursor-pointer" onClick={() => setPreviewFile(file)}>
+                    <Eye className="w-5 h-5 text-white" />
+                  </div>
+
+                  <div className="w-10 h-10 rounded bg-[#121222] border border-gray-800 flex items-center justify-center overflow-hidden mb-1 relative z-0">
                     {file.thumbnail ? (
                       <img src={file.thumbnail} alt="" className="w-full h-full object-cover" />
                     ) : (
