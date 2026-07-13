@@ -1,15 +1,42 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { auth } from '../firebase';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 
 export default function SignIn({ onSignIn, onGoToSignUp, onGoToForgot }) {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('arjun@crimescene.com');
   const [password, setPassword] = useState('password123');
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSignIn();
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      onSignIn();
+    } catch (err) {
+      setError(err.message.replace('Firebase: ', ''));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      onSignIn();
+    } catch (err) {
+      setError(err.message.replace('Firebase: ', ''));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -115,6 +142,18 @@ export default function SignIn({ onSignIn, onGoToSignUp, onGoToForgot }) {
             <button type="button" onClick={onGoToForgot} className="text-xs text-accentTeal hover:underline font-mono">Forgot Password?</button>
           </div>
 
+          {error && (
+            <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-red-500 text-xs font-bold mb-1">Authentication Error</h4>
+                <p className="text-red-200 text-[10px] leading-relaxed break-words">{error}</p>
+              </div>
+            </div>
+          )}
+
           <div className="p-4 rounded-xl bg-accentPurple/5 border border-accentPurple/20 flex items-start gap-3">
             <div className="w-8 h-8 rounded-lg bg-accentPurple/20 flex items-center justify-center shrink-0">
               <ShieldAlert className="w-4 h-4 text-accentPurple" />
@@ -130,9 +169,12 @@ export default function SignIn({ onSignIn, onGoToSignUp, onGoToForgot }) {
           {/* Sign In Button */}
           <button 
             type="submit" 
-            className="w-full py-3 bg-accentPurple hover:bg-accentPurple/90 text-white rounded-lg font-mono text-sm tracking-wider font-bold transition duration-300 shadow-glowPurple border border-accentPurple/40"
+            disabled={loading}
+            className={`w-full py-3 bg-accentPurple hover:bg-accentPurple/90 text-white rounded-lg font-mono text-sm tracking-wider font-bold transition duration-300 shadow-glowPurple border border-accentPurple/40 ${
+              loading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
           >
-            Sign In
+            {loading ? 'Authenticating...' : 'Sign In'}
           </button>
         </form>
 
@@ -145,7 +187,14 @@ export default function SignIn({ onSignIn, onGoToSignUp, onGoToForgot }) {
 
         {/* Social Buttons */}
         <div className="grid grid-cols-1 gap-4">
-          <button className="flex items-center justify-center gap-2 py-2.5 bg-[#0b0b14] border border-gray-800 hover:border-gray-700 rounded-lg text-xs font-mono text-gray-300 transition-all">
+          <button 
+            type="button"
+            disabled={loading}
+            onClick={handleGoogleSignIn}
+            className={`flex items-center justify-center gap-2 py-2.5 bg-[#0b0b14] border border-gray-800 hover:border-gray-700 rounded-lg text-xs font-mono text-gray-300 transition-all ${
+              loading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>

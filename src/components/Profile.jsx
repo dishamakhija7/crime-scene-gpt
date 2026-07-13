@@ -2,7 +2,7 @@ import React from 'react';
 import { ChevronRight, User, Key, Bell, Shield, HelpCircle, Info, LogOut, Award, CheckCircle, FileText, Activity } from 'lucide-react';
 import { motion as m } from 'framer-motion';
 
-export default function Profile({ onLogout, onNavigate }) {
+export default function Profile({ onLogout, onNavigate, currentUser }) {
   const settingsOptions = [
     { icon: <User className="w-5 h-5 text-accentTeal" />, label: 'Personal Information', action: 'personal' },
     { icon: <Key className="w-5 h-5 text-accentPurple" />, label: 'Change Password', action: 'password' },
@@ -27,8 +27,8 @@ export default function Profile({ onLogout, onNavigate }) {
         {/* Avatar */}
         <div className="relative w-20 h-20 rounded-full border-2 border-accentPurple overflow-hidden bg-gray-900 flex items-center justify-center">
           <img 
-            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80" 
-            alt="Inspector Arjun" 
+            src={currentUser?.photoURL || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"} 
+            alt={currentUser?.displayName || "Inspector Arjun"} 
             className="w-full h-full object-cover"
             onError={(e) => {
               e.target.style.display = 'none';
@@ -43,11 +43,11 @@ export default function Profile({ onLogout, onNavigate }) {
         {/* Profile Info */}
         <div className="text-center sm:text-left flex-grow">
           <div className="flex items-center justify-center sm:justify-start gap-2">
-            <h2 className="text-xl font-bold text-white">Inspector Arjun</h2>
+            <h2 className="text-xl font-bold text-white">{currentUser?.displayName || 'Inspector Arjun'}</h2>
             <span className="bg-accentPurple/25 border border-accentPurple/50 text-accentTeal text-[9px] font-mono px-2 py-0.5 rounded-full">LEAD</span>
           </div>
-          <p className="text-gray-400 text-xs mt-1 font-mono">arjun@crimescene.com</p>
-          <p className="text-gray-500 text-[10px] mt-1 font-mono">BADGE ID: CS-98014-ARJ</p>
+          <p className="text-gray-400 text-xs mt-1 font-mono">{currentUser?.email || 'arjun@crimescene.com'}</p>
+          <p className="text-gray-500 text-[10px] mt-1 font-mono">BADGE ID: {currentUser ? currentUser.uid.substring(0, 10).toUpperCase() : 'CS-98014-ARJ'}</p>
         </div>
 
         <button className="px-4 py-1.5 bg-[#0b0b14] border border-gray-800 hover:border-gray-700 text-xs font-mono rounded text-accentTeal transition">

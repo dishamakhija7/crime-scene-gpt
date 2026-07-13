@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { auth } from '../firebase';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserProfile } from '../services/firestore';
 
 export default function SignUp({ onSignUp, onGoToSignIn }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -8,11 +11,25 @@ export default function SignUp({ onSignUp, onGoToSignIn }) {
   const [email, setEmail] = useState('example@email.com');
   const [password, setPassword] = useState('********');
   const [agree, setAgree] = useState(true);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (agree) {
+    if (!agree) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      if (fullName) {
+        await updateProfile(userCredential.user, { displayName: fullName });
+      }
+      await createUserProfile(userCredential.user.uid, fullName, email);
       onSignUp();
+    } catch (err) {
+      setError(err.message.replace('Firebase: ', ''));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -149,6 +166,18 @@ export default function SignUp({ onSignUp, onGoToSignIn }) {
             </span>
           </label>
 
+          {error && (
+            <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-red-500 text-xs font-bold mb-1">Registration Error</h4>
+                <p className="text-red-200 text-[10px] leading-relaxed break-words">{error}</p>
+              </div>
+            </div>
+          )}
+
           <div className="p-4 rounded-xl bg-accentPurple/5 border border-accentPurple/20 flex items-start gap-3">
             <div className="w-8 h-8 rounded-lg bg-accentPurple/20 flex items-center justify-center shrink-0">
               <ShieldAlert className="w-4 h-4 text-accentPurple" />
@@ -164,12 +193,12 @@ export default function SignUp({ onSignUp, onGoToSignIn }) {
           {/* Create Account Button */}
           <button 
             type="submit" 
-            disabled={!agree}
+            disabled={!agree || loading}
             className={`w-full py-3 text-white rounded-lg font-mono text-sm tracking-wider font-bold transition duration-300 border border-accentPurple/40 ${
-              agree ? 'bg-accentPurple hover:bg-accentPurple/90 shadow-glowPurple' : 'bg-gray-800 cursor-not-allowed opacity-50'
+              (agree && !loading) ? 'bg-accentPurple hover:bg-accentPurple/90 shadow-glowPurple' : 'bg-gray-800 cursor-not-allowed opacity-50'
             }`}
           >
-            Create Account
+            {loading ? 'Registering...' : 'Create Account'}
           </button>
         </form>
 

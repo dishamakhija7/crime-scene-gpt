@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Lock, Mail, Shield, Check, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Lock, Mail, Shield, Check, Eye, EyeOff, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import FeaturesFooter from './FeaturesFooter';
+import { auth } from '../firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 export default function ForgotPassword({ onGoToSignIn }) {
   const [step, setStep] = useState(1);
@@ -9,6 +11,21 @@ export default function ForgotPassword({ onGoToSignIn }) {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleSendResetEmail = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setStep(4);
+    } catch (err) {
+      setError(err.message.replace('Firebase: ', ''));
+    } finally {
+      setLoading(false);
+    }
+  };
   
   const handleOtpChange = (index, value) => {
     if (value.length > 1) value = value.slice(0, 1);
@@ -97,11 +114,26 @@ export default function ForgotPassword({ onGoToSignIn }) {
                   </div>
                 </div>
 
+                {error && (
+                  <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center shrink-0">
+                      <ShieldAlert className="w-4 h-4 text-red-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-red-500 text-xs font-bold mb-1">Reset Error</h4>
+                      <p className="text-red-200 text-[10px] leading-relaxed break-words">{error}</p>
+                    </div>
+                  </div>
+                )}
+
                 <button 
-                  onClick={nextStep}
-                  className="w-full py-3 bg-[#5D33F8] hover:bg-[#5D33F8]/90 text-white rounded-lg text-sm font-semibold transition duration-300 shadow-[0_0_15px_rgba(93,51,248,0.4)] border border-[#5D33F8]/40"
+                  onClick={handleSendResetEmail}
+                  disabled={loading}
+                  className={`w-full py-3 bg-[#5D33F8] hover:bg-[#5D33F8]/90 text-white rounded-lg text-sm font-semibold transition duration-300 shadow-[0_0_15px_rgba(93,51,248,0.4)] border border-[#5D33F8]/40 ${
+                    loading ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
-                  Send Reset Link
+                  {loading ? 'Sending...' : 'Send Reset Link'}
                 </button>
               </div>
 
@@ -269,9 +301,9 @@ export default function ForgotPassword({ onGoToSignIn }) {
                 </div>
               </div>
               
-              <h2 className="text-xl font-bold text-white mb-3">Password Reset Successful!</h2>
+              <h2 className="text-xl font-bold text-white mb-3">Reset Email Sent!</h2>
               <p className="text-sm text-gray-400 mb-8 max-w-[280px]">
-                Your password has been reset successfully. You can now sign in with your new password.
+                A password reset email has been sent to your email. Please check your inbox.
               </p>
 
               <button 

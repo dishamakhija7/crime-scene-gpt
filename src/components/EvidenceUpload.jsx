@@ -1,58 +1,329 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FileText, Camera, Video, Film, Mic, Map, Car, Files, 
   Upload, X, Check, Eye
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { auth } from '../firebase';
+import { uploadToCloudinary } from '../services/cloudinary';
+import { saveEvidenceMetadata, getEvidenceByUser, deleteEvidenceMetadata } from '../services/evidenceService';
 
-export default function EvidenceUpload({ onContinue, onBack }) {
-  const [uploadedFiles, setUploadedFiles] = useState([
-    { id: 1, name: 'CCTV_Intersection_West.mp4', type: 'CCTV Footage', thumbnail: 'https://images.unsplash.com/photo-1557597774-9d273605dfa9?auto=format&fit=crop&w=80&h=80&q=80', size: '24.5 MB' },
-    { id: 2, name: 'Dashcam_Car_A.mp4', type: 'Dashcam', thumbnail: 'https://images.unsplash.com/photo-1617469167446-8027ff207515?auto=format&fit=crop&w=80&h=80&q=80', size: '18.2 MB' },
-    { id: 3, name: 'Statement_Witness_1.txt', type: 'Text Statement', thumbnail: '', size: '12 KB' },
-    { id: 4, name: 'Scene_Photo_01.jpg', type: 'Photos', thumbnail: 'https://images.unsplash.com/photo-1508962914676-134849a727f0?auto=format&fit=crop&w=80&h=80&q=80', size: '4.8 MB' },
-    { id: 5, name: 'Sketch_Road_Layout.pdf', type: 'Sketch/Map', thumbnail: '', size: '1.5 MB' }
-  ]);
+/** Accepted MIME types per category (Text Statement is handled separately) */
+const ACCEPT_MAP = {
+  'Photos':       'image/*',
+  'Videos':       'video/*',
+  'CCTV Footage': 'video/*',
+  'Audio':        'audio/*',
+  'Sketch/Map':   'image/*,.pdf',
+  'Dashcam':      'video/*',
+  'Documents':    '.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt',
+};
+
+/** Whether the picker should allow multiple file selection */
+const MULTI_MAP = {
+  'Photos':       true,
+  'Videos':       true,
+  'CCTV Footage': true,
+  'Audio':        true,
+  'Sketch/Map':   true,
+  'Dashcam':      true,
+  'Documents':    true,
+};
+
+/** Format raw byte count to human-readable string */
+const formatSize = (bytes) => {
+  if (!bytes) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+export default function EvidenceUpload({ caseId, onContinue, onBack }) {
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [progressMap, setProgressMap] = useState({}); // { tempKey: 0-100 }
+  const [error, setError] = useState(null);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+  // Text Statement inline modal
+  const [statementOpen, setStatementOpen] = useState(false);
+  const [statementText, setStatementText] = useState('');
+  const [savingStatement, setSavingStatement] = useState(false);
+  const fileInputRef = useRef(null);
+  const activeCategoryRef = useRef(null);
 
   const categories = [
-    { name: 'Text Statement', icon: <FileText className="w-6 h-6 text-accentTeal" />, count: 1 },
-    { name: 'Photos', icon: <Camera className="w-6 h-6 text-accentPurple" />, count: 1 },
-    { name: 'Videos', icon: <Video className="w-6 h-6 text-yellow-500" />, count: 0 },
-    { name: 'CCTV Footage', icon: <Film className="w-6 h-6 text-red-500" />, count: 1 },
-    { name: 'Audio', icon: <Mic className="w-6 h-6 text-green-500" />, count: 0 },
-    { name: 'Sketch/Map', icon: <Map className="w-6 h-6 text-blue-400" />, count: 1 },
-    { name: 'Dashcam', icon: <Car className="w-6 h-6 text-accentTeal" />, count: 1 },
-    { name: 'Documents', icon: <Files className="w-6 h-6 text-gray-400" />, count: 0 },
+    { name: 'Text Statement', icon: <FileText className="w-6 h-6 text-accentTeal" /> },
+    { name: 'Photos',         icon: <Camera   className="w-6 h-6 text-accentPurple" /> },
+    { name: 'Videos',         icon: <Video    className="w-6 h-6 text-yellow-500" /> },
+    { name: 'CCTV Footage',   icon: <Film     className="w-6 h-6 text-red-500" /> },
+    { name: 'Audio',          icon: <Mic      className="w-6 h-6 text-green-500" /> },
+    { name: 'Sketch/Map',     icon: <Map      className="w-6 h-6 text-blue-400" /> },
+    { name: 'Dashcam',        icon: <Car      className="w-6 h-6 text-accentTeal" /> },
+    { name: 'Documents',      icon: <Files    className="w-6 h-6 text-gray-400" /> },
   ];
 
-  const handleUploadSimulate = (category) => {
-    // Generate a simulated file
-    const id = Date.now();
-    const newFile = {
-      id,
-      name: `${category.replace(' ', '_')}_New_Upload_${Math.floor(Math.random() * 100)}.file`,
-      type: category,
-      thumbnail: category.includes('Photo') || category.includes('CCTV') || category.includes('Dashcam') 
-        ? 'https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=80&h=80&q=80'
-        : '',
-      size: '3.1 MB'
+  // ─── Load persisted evidence on mount ────────────────────────────────────
+  useEffect(() => {
+    const loadEvidence = async () => {
+      const user = auth.currentUser;
+      if (!user) { setLoadingFiles(false); return; }
+      try {
+        const docs = await getEvidenceByUser(user.uid);
+        const VISUAL_TYPES = ['Photos', 'CCTV Footage', 'Dashcam', 'Videos'];
+        const mapped = docs.map((d) => ({
+          id:        d.id,
+          name:      d.originalName || d.fileName || 'Untitled',
+          type:      d.type,
+          size:      formatSize(d.fileSize),
+          publicId:  d.publicId,
+          thumbnail: VISUAL_TYPES.includes(d.type) ? d.cloudinaryUrl : '',
+        }));
+        setUploadedFiles(mapped);
+      } catch (err) {
+        console.error('Failed to load evidence:', err);
+      } finally {
+        setLoadingFiles(false);
+      }
     };
-    setUploadedFiles(prev => [...prev, newFile]);
+    loadEvidence();
+  }, []);
+
+  // ─── Text Statement: save directly to Firestore (no file) ────────────────
+  const handleSaveStatement = async () => {
+    const user = auth.currentUser;
+    if (!statementText.trim() || !user) return;
+    setSavingStatement(true);
+    setError(null);
+    try {
+      const blob = new Blob([statementText], { type: 'text/plain' });
+      const tempKey = `${Date.now()}_statement`;
+      setProgressMap((prev) => ({ ...prev, [tempKey]: 0 }));
+
+      const result = await uploadToCloudinary(
+        new File([blob], `statement_${Date.now()}.txt`, { type: 'text/plain' }),
+        (pct) => setProgressMap((prev) => ({ ...prev, [tempKey]: pct }))
+      );
+
+      const evidenceId = await saveEvidenceMetadata({
+        caseId:        caseId || null,
+        type:         'Text Statement',
+        cloudinaryUrl: result.secure_url,
+        publicId:      result.public_id,
+        originalName:  result.original_filename,
+        fileSize:      result.bytes,
+        format:        result.format,
+        uploadedBy:    user.uid,
+      });
+
+      setUploadedFiles((prev) => [
+        { id: evidenceId, name: result.original_filename, type: 'Text Statement', size: formatSize(result.bytes), thumbnail: '' },
+        ...prev,
+      ]);
+      setProgressMap((prev) => { const n = { ...prev }; delete n[tempKey]; return n; });
+      setStatementText('');
+      setStatementOpen(false);
+    } catch (err) {
+      console.error('Statement save failed:', err);
+      setError('Failed to save statement. Please try again.');
+    } finally {
+      setSavingStatement(false);
+    }
   };
 
-  const handleRemoveFile = (id, e) => {
-    e.stopPropagation();
-    setUploadedFiles(prev => prev.filter(f => f.id !== id));
+  // ─── Trigger hidden file input ────────────────────────────────────────────
+  const handleCategoryClick = (categoryName) => {
+    if (categoryName === 'Text Statement') {
+      setStatementOpen(true);
+      return;
+    }
+    activeCategoryRef.current = categoryName;
+    fileInputRef.current.value    = '';
+    fileInputRef.current.accept   = ACCEPT_MAP[categoryName] || '*/*';
+    fileInputRef.current.multiple = MULTI_MAP[categoryName]  ?? true;
+    fileInputRef.current.click();
   };
+
+  // ─── Handle file picker selection → Cloudinary upload ───────────────────
+  const handleFilesSelected = async (e) => {
+    const files    = Array.from(e.target.files);
+    const category = activeCategoryRef.current;
+    const user     = auth.currentUser;
+
+    if (!files.length || !user) return;
+    setError(null);
+    setUploading(true);
+
+    for (const file of files) {
+      const tempKey = `${Date.now()}_${file.name}`;
+      setProgressMap((prev) => ({ ...prev, [tempKey]: 0 }));
+
+      try {
+        // 1. Upload to Cloudinary (XHR with real progress)
+        const result = await uploadToCloudinary(
+          file,
+          (pct) => setProgressMap((prev) => ({ ...prev, [tempKey]: pct }))
+        );
+
+        // 2. Save metadata to Firestore under the active case
+        const evidenceId = await saveEvidenceMetadata({
+          caseId:        caseId || null,
+          type:          category,
+          cloudinaryUrl: result.secure_url,
+          publicId:      result.public_id,
+          originalName:  result.original_filename,
+          fileSize:      result.bytes,
+          format:        result.format,
+          uploadedBy:    user.uid,
+        });
+
+        // 3. Append to local state
+        const VISUAL_TYPES = ['Photos', 'CCTV Footage', 'Dashcam', 'Videos'];
+        setUploadedFiles((prev) => [
+          {
+            id:        evidenceId,
+            name:      result.original_filename || file.name,
+            type:      category,
+            size:      formatSize(result.bytes),
+            publicId:  result.public_id,
+            thumbnail: VISUAL_TYPES.includes(category) ? result.secure_url : '',
+          },
+          ...prev,
+        ]);
+      } catch (err) {
+        console.error(`Upload failed for ${file.name}:`, err);
+        setError(`Failed to upload "${file.name}". ${err.message}`);
+      } finally {
+        setProgressMap((prev) => { const n = { ...prev }; delete n[tempKey]; return n; });
+      }
+    }
+
+    setUploading(false);
+  };
+
+  // ─── Delete single file (Firestore only — Storage deletion needs server) ──
+  const handleRemoveFile = async (file, e) => {
+    e.stopPropagation();
+    setError(null);
+    try {
+      await deleteEvidenceMetadata(file.id);
+      setUploadedFiles((prev) => prev.filter((f) => f.id !== file.id));
+    } catch (err) {
+      console.error('Delete failed:', err);
+      setError(`Failed to delete "${file.name}". Please try again.`);
+    }
+  };
+
+  // ─── Clear all files ──────────────────────────────────────────────────────
+  const handleClearAll = async () => {
+    setError(null);
+    try {
+      await Promise.all(uploadedFiles.map((file) => deleteEvidenceMetadata(file.id)));
+      setUploadedFiles([]);
+    } catch (err) {
+      console.error('Clear all failed:', err);
+      setError('Some files could not be deleted. Please try again.');
+    }
+  };
+
+  const activeUploads = Object.keys(progressMap).length;
 
   return (
     <div className="w-full max-w-2xl mx-auto p-4 md:p-6 space-y-6">
+      {/* Hidden universal file input — programmatically triggered */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFilesSelected}
+      />
+
+      {/* Text Statement inline modal */}
+      {statementOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md bg-[#121222] border border-gray-700 rounded-2xl p-6 shadow-2xl"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wider">Text Statement</h3>
+              <button onClick={() => { setStatementOpen(false); setStatementText(''); }} className="text-gray-500 hover:text-white transition">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <textarea
+              value={statementText}
+              onChange={(e) => setStatementText(e.target.value)}
+              rows={6}
+              placeholder="Type witness statement or notes here…"
+              className="w-full bg-[#0b0b14] border border-gray-800 focus:border-accentTeal rounded-lg p-3 text-sm text-white placeholder-gray-600 outline-none resize-none font-mono transition"
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => { setStatementOpen(false); setStatementText(''); }}
+                className="flex-1 py-2 bg-[#0b0b14] border border-gray-800 text-gray-400 hover:text-white font-mono text-xs uppercase tracking-wider rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveStatement}
+                disabled={!statementText.trim() || savingStatement}
+                className={`flex-1 py-2 font-mono text-xs uppercase tracking-wider rounded-lg transition ${
+                  statementText.trim() && !savingStatement
+                    ? 'bg-accentTeal text-black font-bold'
+                    : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {savingStatement ? 'Saving…' : 'Save Statement'}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Container */}
       <div className="bg-[#121222]/90 border border-gray-800 rounded-2xl p-6 shadow-2xl">
         <div className="text-center mb-6">
           <h2 className="text-xl font-bold text-white tracking-wide">Add Evidence</h2>
           <p className="text-gray-400 text-xs mt-1">Upload any type of evidence. We'll analyze everything.</p>
         </div>
+
+        {/* Error banner */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg"
+          >
+            <X className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-red-300 font-mono">{error}</p>
+            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-200">
+              <X className="w-3 h-3" />
+            </button>
+          </motion.div>
+        )}
+
+        {/* Active upload progress bars */}
+        {activeUploads > 0 && (
+          <div className="mb-4 space-y-2">
+            {Object.entries(progressMap).map(([key, pct]) => (
+              <div key={key}>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-[10px] font-mono text-gray-400 truncate">{key.split('_').slice(1).join('_')}</span>
+                  <span className="text-[10px] font-mono text-accentTeal">{pct}%</span>
+                </div>
+                <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-accentTeal rounded-full"
+                    initial={{ width: '0%' }}
+                    animate={{ width: `${pct}%` }}
+                    transition={{ ease: 'linear', duration: 0.2 }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Upload categories grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -61,8 +332,9 @@ export default function EvidenceUpload({ onContinue, onBack }) {
             return (
               <button
                 key={idx}
-                onClick={() => handleUploadSimulate(cat.name)}
-                className="group relative flex flex-col items-center justify-center p-5 bg-[#0b0b14]/50 border border-gray-850 hover:border-accentPurple rounded-xl text-center transition duration-300 glass-card-hover"
+                onClick={() => handleCategoryClick(cat.name)}
+                disabled={uploading}
+                className="group relative flex flex-col items-center justify-center p-5 bg-[#0b0b14]/50 border border-gray-850 hover:border-accentPurple rounded-xl text-center transition duration-300 glass-card-hover disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {/* Plus icon on top-right */}
                 <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-[#121222] border border-gray-850 flex items-center justify-center text-gray-500 group-hover:text-accentTeal group-hover:border-accentTeal transition">
@@ -90,10 +362,10 @@ export default function EvidenceUpload({ onContinue, onBack }) {
         <div className="border-t border-gray-850 pt-4">
           <div className="flex justify-between items-center mb-3">
             <span className="text-xs font-mono text-gray-400 uppercase tracking-widest">
-              Uploaded ({uploadedFiles.length})
+              Uploaded ({loadingFiles ? '…' : uploadedFiles.length})
             </span>
-            {uploadedFiles.length > 0 && (
-              <button onClick={() => setUploadedFiles([])} className="text-[10px] text-red-400 hover:underline font-mono">
+            {uploadedFiles.length > 0 && !loadingFiles && (
+              <button onClick={handleClearAll} className="text-[10px] text-red-400 hover:underline font-mono">
                 Clear All
               </button>
             )}
@@ -101,7 +373,11 @@ export default function EvidenceUpload({ onContinue, onBack }) {
 
           {/* Horizontal scroll for uploaded previews */}
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
-            {uploadedFiles.length === 0 ? (
+            {loadingFiles ? (
+              <div className="w-full text-center py-6 text-gray-500 text-xs font-mono">
+                Loading evidence…
+              </div>
+            ) : uploadedFiles.length === 0 ? (
               <div className="w-full text-center py-6 border border-dashed border-gray-850 rounded-xl text-gray-500 text-xs font-mono">
                 No files uploaded. Click any category box above to upload.
               </div>
@@ -112,7 +388,7 @@ export default function EvidenceUpload({ onContinue, onBack }) {
                   className="flex-shrink-0 w-24 bg-[#0b0b14] border border-gray-800 rounded-lg p-2 flex flex-col items-center justify-between text-center relative group"
                 >
                   <button 
-                    onClick={(e) => handleRemoveFile(file.id, e)}
+                    onClick={(e) => handleRemoveFile(file, e)}
                     className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-950/80 border border-red-500/50 flex items-center justify-center text-red-400 hover:bg-red-500 hover:text-white transition z-10"
                   >
                     <X className="w-2.5 h-2.5" />
@@ -148,14 +424,14 @@ export default function EvidenceUpload({ onContinue, onBack }) {
           </button>
           <button 
             onClick={onContinue}
-            disabled={uploadedFiles.length === 0}
+            disabled={uploadedFiles.length === 0 || uploading}
             className={`flex-1 py-3 font-mono text-xs uppercase tracking-wider font-bold rounded-lg transition ${
-              uploadedFiles.length > 0
+              uploadedFiles.length > 0 && !uploading
                 ? 'bg-accentPurple hover:bg-accentPurple/90 text-white shadow-glowPurple border border-accentPurple/50'
                 : 'bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-850'
             }`}
           >
-            Continue
+            {uploading ? 'Uploading…' : 'Continue'}
           </button>
         </div>
       </div>

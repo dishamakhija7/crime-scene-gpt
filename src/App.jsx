@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { auth } from './firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import Splash from './components/Splash';
 import SignIn from './components/SignIn';
 import SignUp from './components/SignUp';
@@ -12,6 +14,7 @@ import HelpSupport from './components/settings/HelpSupport';
 import AboutApp from './components/settings/AboutApp';
 import CaseList from './components/CaseList';
 import Dashboard from './components/Dashboard';
+import CreateCase from './components/CreateCase';
 import MCQFlow from './components/MCQFlow';
 import EvidenceUpload from './components/EvidenceUpload';
 import Reconstruction3D from './components/Reconstruction3D';
@@ -21,6 +24,7 @@ import PDFReport from './components/PDFReport';
 import TimelineView from './components/TimelineView';
 import SideDrawer from './components/SideDrawer';
 import QuickActionsModal from './components/QuickActionsModal';
+import ChooseCaseModal from './components/ChooseCaseModal';
 import AlternativeScenarios from './components/AlternativeScenarios';
 
 import { 
@@ -35,10 +39,26 @@ function App() {
   
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [chooseCaseOpen, setChooseCaseOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activeCaseId, setActiveCaseId] = useState(null);
 
   // Simulated global state
   const [investigationData, setInvestigationData] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUser(user);
+        setAuthStatus('authenticated');
+      } else {
+        setCurrentUser(null);
+        setAuthStatus(prev => (prev === 'authenticated' ? 'signin' : prev));
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleNextFromSplash = () => {
     setAuthStatus('signin');
@@ -54,11 +74,23 @@ function App() {
     setActiveView('dashboard');
   };
 
-  const handleLogout = () => {
-    setAuthStatus('signin');
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setAuthStatus('signin');
+      setActiveView('dashboard');
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
   };
 
   const handleNewInvestigation = () => {
+    setChooseCaseOpen(true);
+  };
+
+  const handleCaseSelectedFromModal = (caseId) => {
+    setActiveCaseId(caseId);
+    setChooseCaseOpen(false);
     setQuickActionsOpen(true);
   };
 
@@ -141,8 +173,19 @@ function App() {
         return (
           <Dashboard 
             onNewInvestigation={handleNewInvestigation} 
+            onNewCase={() => setActiveView('create_case')}
             onSelectCase={handleSelectCase} 
             onOpenCases={() => setActiveView('cases')}
+          />
+        );
+      case 'create_case':
+        return (
+          <CreateCase 
+            onCancel={() => setActiveView('dashboard')}
+            onSuccess={(newCaseId) => {
+              setActiveCaseId(newCaseId);
+              setActiveView('dashboard');
+            }}
           />
         );
       case 'mcq':
@@ -158,6 +201,7 @@ function App() {
       case 'evidence':
         return (
           <EvidenceUpload 
+            caseId={activeCaseId}
             onContinue={() => setActiveView('reconstruction')} 
             onBack={() => setActiveView('mcq')} 
           />
@@ -185,7 +229,7 @@ function App() {
           />
         );
       case 'profile':
-        return <Profile onLogout={handleLogout} onNavigate={handleNavigate} />;
+        return <Profile onLogout={handleLogout} onNavigate={handleNavigate} currentUser={currentUser} />;
       case 'personal':
         return <PersonalInfo onBack={() => setActiveView('profile')} />;
       case 'password':
@@ -201,7 +245,14 @@ function App() {
       case 'cases':
         return <CaseList onBack={() => setActiveView('dashboard')} onSelectCase={handleSelectCase} />;
       default:
-        return <Dashboard onNewInvestigation={handleNewInvestigation} onSelectCase={handleSelectCase} onOpenCases={() => setActiveView('cases')} />;
+        return (
+          <Dashboard 
+            onNewInvestigation={handleNewInvestigation} 
+            onNewCase={() => setActiveView('create_case')}
+            onSelectCase={handleSelectCase} 
+            onOpenCases={() => setActiveView('cases')} 
+          />
+        );
     }
   };
 
@@ -410,6 +461,21 @@ function App() {
             onNavigate={(view) => handleNavigate(view)}
             onLogout={handleLogout}
             onNewInvestigation={handleNewInvestigation}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Choose Existing Case Modal */}
+      <AnimatePresence>
+        {chooseCaseOpen && (
+          <ChooseCaseModal 
+            isOpen={chooseCaseOpen} 
+            onClose={() => setChooseCaseOpen(false)}
+            onSelectCase={handleCaseSelectedFromModal}
+            onCreateNewCase={() => {
+              setChooseCaseOpen(false);
+              setActiveView('create_case');
+            }}
           />
         )}
       </AnimatePresence>

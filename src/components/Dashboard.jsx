@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, ChevronRight, Activity, CheckCircle2, Clock, Award, ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { getCases } from '../services/firestore';
 
-export default function Dashboard({ onNewInvestigation, onSelectCase, onOpenCases }) {
+export default function Dashboard({ onNewInvestigation, onSelectCase, onOpenCases, onNewCase }) {
   const stats = [
     { label: 'Total Cases', value: '28', change: '+2 this week', icon: <Activity className="w-5 h-5 text-accentTeal" /> },
     { label: 'In Progress', value: '7', change: 'Processing', icon: <Clock className="w-5 h-5 text-yellow-500" /> },
@@ -10,12 +11,33 @@ export default function Dashboard({ onNewInvestigation, onSelectCase, onOpenCase
     { label: 'Accuracy', value: '92%', change: 'High confidence', icon: <Award className="w-5 h-5 text-green-500" /> },
   ];
 
-  const recentCases = [
+  const [recentCases, setRecentCases] = useState([
     { id: 'INV-2025-0715', title: 'Vehicle Collision - City Rd', time: 'Today, 10:30 AM', status: 'In Progress', statusColor: 'bg-green-500/10 border-green-500/30 text-green-400' },
     { id: 'INV-2025-0714', title: 'Pedestrian Hit & Run', time: 'Yesterday, 04:15 PM', status: 'Completed', statusColor: 'bg-accentPurple/20 border-accentPurple/50 text-accentTeal' },
     { id: 'INV-2025-0713', title: 'Intersection T-Bone', time: '12 May, 09:29 AM', status: 'In Progress', statusColor: 'bg-green-500/10 border-green-500/30 text-green-400' },
     { id: 'INV-2025-0712', title: 'Multi-Vehicle Pile-up', time: '11 May, 02:43 PM', status: 'Completed', statusColor: 'bg-accentPurple/20 border-accentPurple/50 text-accentTeal' },
-  ];
+  ]);
+
+  useEffect(() => {
+    const fetchRecentCases = async () => {
+      try {
+        const casesData = await getCases();
+        if (casesData && casesData.length > 0) {
+          const formatted = casesData.slice(0, 4).map(c => ({
+            id: c.id,
+            title: c.title || 'Untitled Case',
+            time: new Date(c.createdAt).toLocaleString(),
+            status: c.status || 'In Progress',
+            statusColor: c.status === 'Completed' ? 'bg-accentPurple/20 border-accentPurple/50 text-accentTeal' : 'bg-green-500/10 border-green-500/30 text-green-400'
+          }));
+          setRecentCases(formatted);
+        }
+      } catch (err) {
+        console.error("Error fetching cases for dashboard:", err);
+      }
+    };
+    fetchRecentCases();
+  }, []);
 
   return (
     <div className="w-full max-w-5xl mx-auto p-4 md:p-6 space-y-6">
@@ -29,14 +51,25 @@ export default function Dashboard({ onNewInvestigation, onSelectCase, onOpenCase
         </div>
         
         {/* CTA */}
-        <motion.button 
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={onNewInvestigation}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-accentPurple hover:bg-accentPurple/90 text-white font-mono text-xs tracking-wider uppercase font-bold rounded-lg shadow-glowPurple border border-accentPurple/50 transition"
-        >
-          <Plus className="w-4 h-4" /> New Investigation
-        </motion.button>
+        <div className="flex items-center gap-3">
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onNewCase}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-accentTeal hover:bg-accentTeal/90 text-black font-mono text-xs tracking-wider uppercase font-bold rounded-lg shadow-glowTeal border border-accentTeal/50 transition"
+          >
+            <Plus className="w-4 h-4" /> New Case
+          </motion.button>
+          
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={onNewInvestigation}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-accentPurple hover:bg-accentPurple/90 text-white font-mono text-xs tracking-wider uppercase font-bold rounded-lg shadow-glowPurple border border-accentPurple/50 transition"
+          >
+            <Plus className="w-4 h-4" /> New Investigation
+          </motion.button>
+        </div>
       </div>
 
       {/* Stats Grid */}
