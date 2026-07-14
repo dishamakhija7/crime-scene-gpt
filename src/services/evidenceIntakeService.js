@@ -1,38 +1,32 @@
-import { getEvidenceByCase } from './evidenceService';
+import { getInvestigationState, updateInvestigationState } from './investigationStateService';
+import { callGroqWithStructuredOutput } from './groqService';
 import { getCaseById } from './firestore';
-import { callGeminiWithStructuredOutput } from './geminiService';
-import { db } from '../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
 
 const schema = {
   type: "OBJECT",
   properties: {
-    executiveSummary: { type: "STRING" },
-    incidentType: { type: "STRING" },
-    vehiclesDetected: { type: "ARRAY", items: { type: "STRING" } },
-    peopleDetected: { type: "ARRAY", items: { type: "STRING" } },
-    roadLayout: { type: "STRING" },
-    trafficSignsSignals: { type: "ARRAY", items: { type: "STRING" } },
-    weather: { type: "STRING" },
-    lightingConditions: { type: "STRING" },
-    timelineClues: { type: "ARRAY", items: { type: "STRING" } },
-    objectsDetected: { type: "ARRAY", items: { type: "STRING" } },
-    knownFacts: { type: "ARRAY", items: { type: "STRING" } },
-    uncertainFacts: { type: "ARRAY", items: { type: "STRING" } },
-    missingInformation: { type: "ARRAY", items: { type: "STRING" } },
-    observations: { type: "ARRAY", items: { type: "STRING" } },
-    confidenceScore: { type: "NUMBER" },
-    additionalNotes: { type: "STRING" }
+    knownFacts: { 
+      type: "OBJECT", 
+      description: "Structured object of known facts. Keys should be fields like weather, roadType, collisionType, vehicleCount, vehicleTypes, lighting, roadCondition, impactPoint, timeOfDay, location. Values should be the inferred fact."
+    },
+    missingFields: { 
+      type: "OBJECT", 
+      description: "Structured object of required reconstruction fields (e.g. vehicleSpeed, lanePosition, visibility, trafficSignal, driverAction, vehicleDirection). Values must be one of: 'missing', 'answered', 'inferred', 'unknown'."
+    },
+    confidenceScores: { 
+      type: "OBJECT",
+      description: "Confidence (0-100) per extracted field, e.g. { 'weather': 95, 'collisionType': 88 }"
+    },
+    reasoning: { 
+      type: "OBJECT",
+      description: "Short explanation for every inferred field, e.g. { 'weather': 'Identified from witness statement' }. Do not hallucinate. If evidence is insufficient, mark field as unknown."
+    }
   },
   required: [
-    "executiveSummary",
-    "incidentType",
-    "vehiclesDetected",
-    "peopleDetected",
-    "roadLayout",
-    "weather",
-    "lightingConditions",
-    "confidenceScore"
+    "knownFacts",
+    "missingFields",
+    "confidenceScores",
+    "reasoning"
   ]
 };
 
@@ -40,45 +34,89 @@ export const analyzeEvidence = async (caseId) => {
   if (!caseId) throw new Error("No case ID provided for analysis.");
 
   try {
-    // 1. Fetch the case and its uploaded evidence
-    const caseData = await getCaseById(caseId);
-    const evidenceList = await getEvidenceByCase(caseId);
+    // 1. Mark agent as running
+    await updateInvestigationState(caseId, {
+      status: 'investigating',
+      agentStatus: { 'EvidenceAnalysisAgent': 'running' }
+    });
 
-    // 2. Prepare the prompt and context
-    let contextPrompt = `You are an expert forensic accident investigator AI. Analyze the following evidence for Case ID: ${caseId}.\n\n`;
+    // 2. Fetch the current investigation state and initial case data
+    const state = await getInvestigationState(caseId);
+    const caseData = await getCaseById(caseId);
+
+    // 3. Prepare the prompt and context
+    let contextPrompt = `You are an expert forensic accident investigator AI. Analyze ALL available evidence for Case ID: ${caseId} to determine known facts and missing information.\n\n`;
     
+    contextPrompt += `=== SOURCE 1: Structured Case Details (VERIFIED) ===\n`;
     if (caseData) {
-      contextPrompt += `Initial Case Details:\n`;
+      contextPrompt += `Treat the following structured case details entered by the investigator as VERIFIED information:\n`;
       contextPrompt += JSON.stringify(caseData, null, 2) + `\n\n`;
+    } else {
+      contextPrompt += `No structured case data found.\n\n`;
     }
 
-    contextPrompt += `Uploaded Evidence Metadata:\n`;
-    evidenceList.forEach((ev, idx) => {
-      contextPrompt += `Evidence ${idx + 1}: ${ev.type} - ${ev.originalName || 'Unnamed'}\n`;
-      if (ev.cloudinaryUrl) {
-        contextPrompt += `URL: ${ev.cloudinaryUrl}\n`;
-      }
-    });
+    contextPrompt += `=== SOURCE 2: Uploaded Evidence (SUPPORTING) ===\n`;
+    if (state.uploadedEvidence && state.uploadedEvidence.length > 0) {
+      contextPrompt += `Treat witness statements and uploaded evidence as additional sources that can confirm, enrich, complete, or correct obvious inconsistencies.\n`;
+      state.uploadedEvidence.forEach((ev, idx) => {
+        contextPrompt += `Evidence ${idx + 1}: ${ev.type} - ${ev.originalName || 'Unnamed'}\n`;
+        if (ev.url) {
+          contextPrompt += `URL: ${ev.url}\n`;
+        }
+        if (ev.timestamp) {
+          contextPrompt += `Timestamp: ${ev.timestamp}\n`;
+        }
+      });
+    } else {
+      contextPrompt += `No evidence uploaded yet.\n`;
+    }
 
-    contextPrompt += `\nBased on this information (and the URLs provided if you can process them), provide a comprehensive structured analysis of the incident. Note: if you cannot directly read the URLs, infer as much as possible from the types and names of the evidence uploaded combined with the initial case details. Do not generate follow-up questions yet. Return ONLY the JSON structure.`;
+    contextPrompt += `\n=== NEW DECISION RULES ===
+1. You must intelligently merge information from ALL available sources.
+2. Structured Case Details (Source 1) are VERIFIED. Do not mark fields provided there as missing.
+3. Uploaded Evidence (Source 2) supplements Source 1.
+4. Only set a field in 'missingFields' to "missing" if it cannot be determined from ANY available source.
+5. If multiple sources disagree, priority is: 1. Structured Case Data, 2. Uploaded image/video, 3. Witness statement, 4. Metadata.
+6. If confidence is low due to conflict, store reasoning explaining the conflict.
 
-    // 3. Call Gemini
-    const result = await callGeminiWithStructuredOutput({
+Extract structured information into knownFacts and missingFields. For every inferred fact, provide a confidence score (0-100) and a short reasoning explanation. Return ONLY the JSON structure matching the schema.`;
+
+    // 4. Call Groq
+    const result = await callGroqWithStructuredOutput({
       prompt: contextPrompt,
       schema: schema,
-      model: 'gemini-3.5-flash'
+      model: 'llama-3.3-70b-versatile'
     });
 
-    // 4. Save structured JSON to Firestore under the case document
-    const caseRef = doc(db, 'cases', caseId);
-    await updateDoc(caseRef, {
-      aiAnalysis: result,
-      updatedAt: new Date().toISOString()
+    // 5. Update InvestigationState
+    // Extract perField confidence scores and calculate an overall average
+    const perFieldScores = result.confidenceScores || {};
+    const scoresArray = Object.values(perFieldScores).filter(v => typeof v === 'number');
+    const overallScore = scoresArray.length > 0 ? scoresArray.reduce((a, b) => a + b, 0) / scoresArray.length : 0;
+
+    await updateInvestigationState(caseId, {
+      knownFacts: result.knownFacts || {},
+      missingFields: result.missingFields || {},
+      confidenceScores: {
+        overall: overallScore,
+        evidenceQuality: overallScore, // Placeholder until a specific quality metric is calculated
+        patternMatch: 0,
+        perField: perFieldScores
+      },
+      reasoning: result.reasoning || {},
+      agentStatus: { 'EvidenceAnalysisAgent': 'completed' },
+      // Leave status as investigating so the next agent can pick it up
     });
 
     return result;
   } catch (error) {
-    console.error("Evidence Intake Service error:", error);
+    console.error("Evidence Analysis Agent error:", error);
+    
+    // Mark agent as failed
+    await updateInvestigationState(caseId, {
+      agentStatus: { 'EvidenceAnalysisAgent': 'failed' }
+    });
+    
     throw error;
   }
 };

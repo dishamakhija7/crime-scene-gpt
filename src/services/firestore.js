@@ -10,6 +10,7 @@ import {
   query, 
   orderBy 
 } from 'firebase/firestore';
+import { initialInvestigationState } from '../models/InvestigationState';
 
 /**
  * ==========================================
@@ -63,6 +64,11 @@ export const createCase = async (caseId, caseData) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+
+    // Create the initial InvestigationState document matching the lifecycle
+    const stateRef = doc(db, 'investigationStates', caseId);
+    await setDoc(stateRef, initialInvestigationState(caseId));
+
     return caseId;
   } catch (error) {
     console.error("Error creating case:", error);

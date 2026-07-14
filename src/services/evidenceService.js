@@ -30,7 +30,9 @@ import {
   query,
   orderBy,
   where,
+  arrayUnion,
 } from 'firebase/firestore';
+import { updateInvestigationState } from './investigationStateService';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -87,6 +89,21 @@ export const saveEvidenceMetadata = async ({
 
     // Write the auto-generated Firestore ID back as evidenceId
     await updateDoc(docRef, { evidenceId: docRef.id });
+
+    // Synchronize this new evidence with the InvestigationState pipeline
+    if (caseId) {
+      const timestamp = new Date().toISOString();
+      await updateInvestigationState(caseId, {
+        // @ts-ignore - arrayUnion works perfectly at runtime for appending to arrays
+        uploadedEvidence: arrayUnion({
+          id: docRef.id,
+          type: type || format || 'unknown',
+          originalName: originalName || 'Unnamed',
+          url: cloudinaryUrl || '',
+          timestamp: timestamp
+        })
+      });
+    }
 
     return docRef.id;
   } catch (error) {

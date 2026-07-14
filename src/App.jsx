@@ -27,6 +27,8 @@ import SideDrawer from './components/SideDrawer';
 import QuickActionsModal from './components/QuickActionsModal';
 import ChooseCaseModal from './components/ChooseCaseModal';
 import AlternativeScenarios from './components/AlternativeScenarios';
+import CaseAnalysis from './components/CaseAnalysis';
+import AIInvestigator from './components/AIInvestigator';
 
 import { 
   Menu, Bell, ShieldAlert, Compass, FileText, User, 
@@ -212,7 +214,20 @@ function App() {
         return (
           <EvidenceIntakeAgent
             caseId={activeCaseId}
-            onAnalysisComplete={() => setActiveView('reconstruction')}
+            onAnalysisComplete={() => setActiveView('case_analysis')}
+          />
+        );
+      case 'case_analysis':
+        return (
+          <CaseAnalysis
+            caseId={activeCaseId}
+            onContinue={() => setActiveView('ai_investigator')}
+          />
+        );
+      case 'ai_investigator':
+        return (
+          <AIInvestigator
+            caseId={activeCaseId}
           />
         );
       case 'heatmap':

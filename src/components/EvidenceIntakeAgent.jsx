@@ -16,7 +16,9 @@ export default function EvidenceIntakeAgent({ caseId, onAnalysisComplete }) {
         await analyzeEvidence(caseId);
         if (mounted) {
           setStatus('success');
-          // Removed setTimeout call to onAnalysisComplete to prevent navigating to Agent 2
+          setTimeout(() => {
+            if (mounted && onAnalysisComplete) onAnalysisComplete();
+          }, 2000);
         }
       } catch (err) {
         console.error(err);
